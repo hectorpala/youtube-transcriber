@@ -39,15 +39,19 @@ function ChartContent() {
           display: none !important;
         }
       `}</style>
-      <div className="fixed inset-0 bg-black">
-        <button
-          onClick={() => router.push("/")}
-          className="absolute top-3 left-3 z-50 flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs text-white backdrop-blur-sm transition-colors hover:bg-white/20"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Dashboard
-        </button>
-        <TradingViewChart symbol={symbol} height="100vh" />
+      <div className="fixed inset-0 flex flex-col bg-black">
+        <div className="flex-none flex items-center h-10 px-3">
+          <button
+            onClick={() => router.push("/")}
+            className="flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs text-white transition-colors hover:bg-white/20"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Dashboard
+          </button>
+        </div>
+        <div className="flex-1 min-h-0">
+          <TradingViewChart symbol={symbol} height="100%" />
+        </div>
       </div>
     </>
   );
