@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# tauri
+src-tauri/target/
+
+# misc assets not part of the project
+app-icon.png
