@@ -30,6 +30,7 @@ def download_audio(video_url: str, output_path: str) -> str:
 
     cmd = [
         "python3", "-m", "yt_dlp",
+        "--cookies-from-browser", "chrome",
         "-x",
         "--audio-format", "mp3",
         "--audio-quality", "5",
@@ -55,7 +56,7 @@ def download_audio(video_url: str, output_path: str) -> str:
     raise RuntimeError("Audio file not found after download")
 
 
-def transcribe_with_whisper(audio_path: str, model_name: str, language: str | None) -> dict:
+def transcribe_with_whisper(audio_path: str, model_name: str, language=None) -> dict:
     """Transcribe audio file using OpenAI Whisper."""
     emit({"type": "progress", "stage": "transcribe", "message": f"Loading whisper model '{model_name}'..."})
 
@@ -86,7 +87,7 @@ def transcribe_with_whisper(audio_path: str, model_name: str, language: str | No
     }
 
 
-def transcribe_with_subtitles(video_url: str) -> dict | None:
+def transcribe_with_subtitles(video_url: str):
     """Try to get existing subtitles/auto-captions from YouTube."""
     emit({"type": "progress", "stage": "subtitles", "message": "Checking for existing subtitles..."})
 
@@ -94,6 +95,7 @@ def transcribe_with_subtitles(video_url: str) -> dict | None:
         out_template = os.path.join(tmpdir, "subs")
         cmd = [
             "python3", "-m", "yt_dlp",
+            "--cookies-from-browser", "chrome",
             "--write-auto-sub",
             "--write-sub",
             "--sub-lang", "en,es",
@@ -127,20 +129,22 @@ def transcribe_with_subtitles(video_url: str) -> dict | None:
 
 def parse_vtt(path: str) -> str:
     """Extract plain text from a VTT subtitle file."""
+    import re
     lines = []
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            # Skip headers, timestamps, and empty lines
             if not line or line.startswith("WEBVTT") or line.startswith("Kind:") or line.startswith("Language:"):
                 continue
             if "-->" in line:
                 continue
-            if line.startswith("<"):
+            # Remove VTT tags: <00:00:39.155>, <c>, </c>, etc.
+            clean = re.sub(r"<[^>]+>", "", line).strip()
+            if not clean:
                 continue
             # Remove duplicate consecutive lines (common in auto-captions)
-            if not lines or lines[-1] != line:
-                lines.append(line)
+            if not lines or lines[-1] != clean:
+                lines.append(clean)
     return " ".join(lines)
 
 
