@@ -1,12 +1,12 @@
 [package]
-name = "trading-dashboard"
+name = "youtube-transcriber"
 version = "0.1.0"
-description = "Trading Dashboard"
+description = "YouTube Transcriber"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "trading_dashboard_lib"
+name = "youtube_transcriber_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

@@ -12,12 +12,10 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, History, Tv } from "lucide-react";
+import { Tv, Package } from "lucide-react";
 
 const navItems = [
-  { title: "Markets", href: "/", icon: LayoutDashboard },
-  { title: "Replay", href: "/replay", icon: History },
-  { title: "Channels", href: "/channels", icon: Tv },
+  { title: "Channels", href: "/", icon: Tv },
 ];
 
 export function AppSidebar() {
@@ -27,15 +25,15 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" variant="sidebar">
       <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-profit/10 text-profit font-bold text-sm font-mono">
-            T
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary font-bold text-sm font-mono">
+            YT
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
             <span className="text-sm font-semibold text-foreground">
-              Trading
+              YouTube
             </span>
             <span className="text-[10px] font-mono text-muted-foreground">
-              Dashboard
+              Transcriber
             </span>
           </div>
         </Link>

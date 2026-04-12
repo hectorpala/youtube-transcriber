@@ -22,7 +22,7 @@ export function Topbar() {
     <header className="flex h-12 items-center gap-4 border-b border-border bg-card/80 backdrop-blur-sm px-4">
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="h-5" />
-      <span className="text-sm font-semibold text-foreground">Trading Dashboard</span>
+      <span className="text-sm font-semibold text-foreground">YouTube Transcriber</span>
       <div className="ml-auto flex items-center gap-2">
         <button
           onClick={cycleTheme}

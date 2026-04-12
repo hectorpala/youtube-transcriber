@@ -552,7 +552,7 @@ export default function ChannelDetailPage({
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <AlertCircle className="h-8 w-8 text-muted-foreground mb-3" />
         <p className="text-sm text-muted-foreground">Channel not found.</p>
-        <Link href="/channels">
+        <Link href="/">
           <Button size="sm" variant="ghost" className="mt-4">
             <ArrowLeft className="h-3.5 w-3.5" />
             <span>Back to channels</span>
@@ -566,7 +566,7 @@ export default function ChannelDetailPage({
     <>
       {/* Header */}
       <div className="flex items-center gap-3 mb-1">
-        <Link href="/channels">
+        <Link href="/">
           <Button size="icon-sm" variant="ghost">
             <ArrowLeft className="h-4 w-4" />
           </Button>

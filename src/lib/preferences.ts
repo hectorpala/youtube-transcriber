@@ -1,19 +1,15 @@
 import { z } from "zod";
 
-const STORAGE_KEY = "trading-dashboard-preferences";
+const STORAGE_KEY = "youtube-transcriber-preferences";
 
 const preferencesSchema = z.object({
-  favorites: z.array(z.string()).default([]),
   theme: z.enum(["system", "dark", "light"]).default("system"),
-  chartInterval: z.string().default("60"),
 });
 
 export type Preferences = z.infer<typeof preferencesSchema>;
 
 const DEFAULTS: Preferences = {
-  favorites: [],
   theme: "system",
-  chartInterval: "60",
 };
 
 let listeners: Array<() => void> = [];
@@ -41,22 +37,8 @@ function save(prefs: Preferences) {
   notify();
 }
 
-export function toggleFavorite(symbol: string) {
-  const prefs = getPreferences();
-  const idx = prefs.favorites.indexOf(symbol);
-  const favorites =
-    idx >= 0
-      ? prefs.favorites.filter((s) => s !== symbol)
-      : [...prefs.favorites, symbol];
-  save({ ...prefs, favorites });
-}
-
 export function setTheme(theme: Preferences["theme"]) {
   save({ ...getPreferences(), theme });
-}
-
-export function setChartInterval(interval: string) {
-  save({ ...getPreferences(), chartInterval: interval });
 }
 
 export function subscribe(listener: () => void) {

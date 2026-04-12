@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Trading Dashboard",
-  description: "Dashboard de trading con gráficas en vivo",
+  title: "YouTube Transcriber",
+  description: "YouTube channel transcription pipeline",
 };
 
 export default function RootLayout({

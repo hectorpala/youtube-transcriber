@@ -1,7 +1,7 @@
 {
-  "productName": "Trading Dashboard",
+  "productName": "YouTube Transcriber",
   "version": "0.1.0",
-  "identifier": "com.trading.dashboard",
+  "identifier": "com.youtube.transcriber",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:3000",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Trading Dashboard",
+        "title": "YouTube Transcriber",
         "width": 1280,
         "height": 800,
         "resizable": true,
@@ -19,7 +19,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' https://*.tradingview.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.tradingview.com; style-src 'self' 'unsafe-inline' https://*.tradingview.com; img-src 'self' data: blob: https://*.tradingview.com; frame-src https://*.tradingview.com; connect-src 'self' wss://stream.binance.com:9443 https://api.binance.com https://*.tradingview.com wss://*.tradingview.com; font-src 'self' data: https://*.tradingview.com; worker-src 'self' blob: https://*.tradingview.com"
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://i.ytimg.com https://*.ggpht.com; connect-src 'self'; font-src 'self' data:"
     }
   },
   "bundle": {
