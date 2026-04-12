@@ -26,6 +26,7 @@ import {
   type GlobalStats,
   addVideoBulk,
   updateChannel,
+  deleteChannel,
   getGlobalStats,
   getAllChannelProgress,
   getPausedOrActiveBatches,
@@ -43,6 +44,7 @@ import {
   Package,
   Play,
   XCircle,
+  Trash2,
 } from "lucide-react";
 
 // ---------- Status helpers ----------
@@ -243,13 +245,16 @@ function ChannelCard({
   progress,
   scrapeState,
   onScrape,
+  onDelete,
 }: {
   channel: Channel;
   progress: ChannelProgress | undefined;
   scrapeState: ScrapeState | null;
   onScrape: (channel: Channel) => void;
+  onDelete: (channel: Channel) => void;
 }) {
   const isScraping = scrapeState?.channelId === channel.id;
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const transcribed = progress?.transcribed ?? 0;
   const total = progress?.total ?? channel.total_videos;
   const errors = progress?.errors ?? 0;
@@ -375,6 +380,26 @@ function ChannelCard({
             </span>
           </div>
         )}
+
+        {/* Delete */}
+        <div className="mt-3 pt-2 border-t border-border">
+          {confirmDelete ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-destructive">Delete channel and all videos?</span>
+              <Button size="xs" variant="destructive" onClick={() => { onDelete(channel); setConfirmDelete(false); }}>
+                Yes, delete
+              </Button>
+              <Button size="xs" variant="ghost" onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button size="xs" variant="ghost" className="text-muted-foreground" onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="h-3 w-3" />
+              <span>Delete</span>
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -421,6 +446,11 @@ export default function ChannelsPage() {
     await refresh();
     await loadStats();
   }, [refresh, loadStats]);
+
+  const handleDelete = useCallback(async (channel: Channel) => {
+    await deleteChannel(channel.id);
+    await handleRefresh();
+  }, [handleRefresh]);
 
   const handleScrape = useCallback(
     async (channel: Channel) => {
@@ -506,6 +536,7 @@ export default function ChannelsPage() {
               progress={progressMap.get(channel.id)}
               scrapeState={scrapeState?.channelId === channel.id ? scrapeState : null}
               onScrape={handleScrape}
+              onDelete={handleDelete}
             />
           ))}
         </div>
