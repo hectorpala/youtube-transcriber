@@ -89,7 +89,7 @@ function extractChannelInfo(input: string): {
       id: handle.slice(1),
       name: handle,
       handle,
-      url: `https://www.youtube.com/${handle}/videos`,
+      url: `https://www.youtube.com/${handle}`,
     };
   }
 
@@ -98,11 +98,11 @@ function extractChannelInfo(input: string): {
     const parts = url.pathname.split("/").filter(Boolean);
 
     if (parts[0] === "channel" && parts[1]) {
-      return { id: parts[1], name: parts[1], handle: null, url: `https://www.youtube.com/channel/${parts[1]}/videos` };
+      return { id: parts[1], name: parts[1], handle: null, url: `https://www.youtube.com/channel/${parts[1]}` };
     }
     if (parts[0]?.startsWith("@")) {
       const handle = parts[0];
-      return { id: handle.slice(1), name: handle, handle, url: `https://www.youtube.com/${handle}/videos` };
+      return { id: handle.slice(1), name: handle, handle, url: `https://www.youtube.com/${handle}` };
     }
     if (parts[0] === "c" && parts[1]) {
       return { id: parts[1], name: parts[1], handle: null, url: trimmed };
@@ -111,7 +111,7 @@ function extractChannelInfo(input: string): {
     // Not a valid URL
   }
 
-  return { id: trimmed, name: trimmed, handle: null, url: `https://www.youtube.com/@${trimmed}/videos` };
+  return { id: trimmed, name: trimmed, handle: null, url: `https://www.youtube.com/@${trimmed}` };
 }
 
 function AddChannelForm({ onAdd }: { onAdd: () => void }) {
