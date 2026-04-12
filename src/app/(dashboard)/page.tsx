@@ -180,7 +180,7 @@ function RecoveryBanner({ batches }: { batches: Batch[] }) {
                 {b.status === "pausado" ? "Paused" : "In progress"}
               </Badge>
             </span>
-            <Link href={`/channels/${b.channel_id}/batch/${b.id}`}>
+            <Link href={`/batch?channelId=${b.channel_id}&batchId=${b.id}`}>
               <Button size="xs" variant="outline">
                 <Play className="h-3 w-3" />
                 <span>Resume</span>
@@ -270,7 +270,7 @@ function ChannelCard({
       case "en_progreso":
       case "completado":
         return (
-          <Link href={`/channels/${channel.id}`}>
+          <Link href={`/channel?id=${channel.id}`}>
             <Button size="sm" variant="secondary">
               <List className="h-3.5 w-3.5" />
               <span>View Videos</span>
@@ -286,7 +286,7 @@ function ChannelCard({
         );
       default:
         return (
-          <Link href={`/channels/${channel.id}`}>
+          <Link href={`/channel?id=${channel.id}`}>
             <Button size="sm" variant="ghost">
               <List className="h-3.5 w-3.5" />
               <span>Open</span>

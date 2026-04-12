@@ -1,8 +1,8 @@
 "use client";
 
-import { use, useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { PageHeader } from "@/components/page-header";
@@ -282,13 +282,10 @@ function BatchVideoRow({
 
 // ---------- Main page ----------
 
-export default function BatchViewPage({
-  params,
-}: {
-  params: Promise<{ id: string; batchId: string }>;
-}) {
-  const { id: channelId, batchId: batchIdStr } = use(params);
-  const batchId = parseInt(batchIdStr, 10);
+export default function BatchViewPage() {
+  const searchParams = useSearchParams();
+  const channelId = searchParams.get("channelId") ?? "";
+  const batchId = parseInt(searchParams.get("batchId") ?? "0", 10);
   const router = useRouter();
 
   const [channel, setChannel] = useState<Channel | null>(null);
@@ -543,7 +540,7 @@ export default function BatchViewPage({
   }, [batch, batchId, channelId, loadData]);
 
   const handleNextBatchCreated = useCallback((newBatchId: number) => {
-    router.push(`/channels/${channelId}/batch/${newBatchId}`);
+    router.push(`/batch?channelId=${channelId}&batchId=${newBatchId}`);
   }, [channelId, router]);
 
   const handleRetry = useCallback(async (video: Video) => {
@@ -593,7 +590,7 @@ export default function BatchViewPage({
       <div className="flex flex-col items-center justify-center py-16">
         <AlertCircle className="h-8 w-8 text-muted-foreground mb-3" />
         <p className="text-sm text-muted-foreground">Batch not found.</p>
-        <Link href={`/channels/${channelId}`}>
+        <Link href={`/channel?id=${channelId}`}>
           <Button size="sm" variant="ghost" className="mt-4">
             <ArrowLeft className="h-3.5 w-3.5" />
             <span>Back to channel</span>
@@ -613,7 +610,7 @@ export default function BatchViewPage({
     <>
       {/* Header */}
       <div className="flex items-center gap-3 mb-1">
-        <Link href={`/channels/${channelId}`}>
+        <Link href={`/channel?id=${channelId}`}>
           <Button size="icon-sm" variant="ghost">
             <ArrowLeft className="h-4 w-4" />
           </Button>

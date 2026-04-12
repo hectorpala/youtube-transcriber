@@ -128,7 +128,7 @@ async fn scrape_channel(
         .path()
         .resource_dir()
         .map_err(|e| format!("Cannot resolve resource dir: {e}"))?;
-    let script_path = scripts_dir.join("scripts/channel_scraper.py");
+    let script_path = scripts_dir.join("_up_/scripts/channel_scraper.py");
 
     if !script_path.exists() {
         return Err(format!(
@@ -246,7 +246,7 @@ async fn process_batch(
         .path()
         .resource_dir()
         .map_err(|e| format!("Cannot resolve resource dir: {e}"))?;
-    let script_path = scripts_dir.join("scripts/transcribe.py");
+    let script_path = scripts_dir.join("_up_/scripts/transcribe.py");
 
     if !script_path.exists() {
         return Err(format!(
@@ -514,7 +514,7 @@ async fn transcribe_single(
         .path()
         .resource_dir()
         .map_err(|e| format!("Cannot resolve resource dir: {e}"))?;
-    let script_path = scripts_dir.join("scripts/transcribe.py");
+    let script_path = scripts_dir.join("_up_/scripts/transcribe.py");
 
     if !script_path.exists() {
         return Err("Transcribe script not found".into());

@@ -18,7 +18,7 @@ def scrape_channel(channel_url: str):
     print(json.dumps({"type": "progress", "message": "Starting yt-dlp scan..."}), flush=True)
 
     cmd = [
-        "yt-dlp",
+        "python3", "-m", "yt_dlp",
         "--flat-playlist",
         "--dump-json",
         "--no-warnings",

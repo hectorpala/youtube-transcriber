@@ -1,8 +1,8 @@
 "use client";
 
-import { use, useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -417,7 +417,7 @@ function BatchList({ channelId, batches }: { channelId: string; batches: Batch[]
           return (
             <Link
               key={b.id}
-              href={`/channels/${channelId}/batch/${b.id}`}
+              href={`/batch?channelId=${channelId}&batchId=${b.id}`}
               className="flex items-center justify-between rounded-md border border-border px-3 py-2 hover:bg-muted/30 transition-colors"
             >
               <div className="flex items-center gap-3">
@@ -444,12 +444,9 @@ function BatchList({ channelId, batches }: { channelId: string; batches: Batch[]
 
 // ---------- Main page ----------
 
-export default function ChannelDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id: channelId } = use(params);
+export default function ChannelDetailPage() {
+  const searchParams = useSearchParams();
+  const channelId = searchParams.get("id") ?? "";
   const router = useRouter();
   const [channel, setChannel] = useState<Channel | null>(null);
   const [channelLoading, setChannelLoading] = useState(true);
@@ -530,7 +527,7 @@ export default function ChannelDetailPage({
     setSelected(new Set());
     refresh();
     refreshBatches();
-    router.push(`/channels/${channelId}/batch/${batchId}`);
+    router.push(`/batch?channelId=${channelId}&batchId=${batchId}`);
   }, [refresh, refreshBatches, channelId, router]);
 
   if (channelLoading) {

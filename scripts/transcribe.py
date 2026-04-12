@@ -29,7 +29,7 @@ def download_audio(video_url: str, output_path: str) -> str:
     emit({"type": "progress", "stage": "download", "message": "Downloading audio..."})
 
     cmd = [
-        "yt-dlp",
+        "python3", "-m", "yt_dlp",
         "-x",
         "--audio-format", "mp3",
         "--audio-quality", "5",
@@ -93,7 +93,7 @@ def transcribe_with_subtitles(video_url: str) -> dict | None:
     with tempfile.TemporaryDirectory() as tmpdir:
         out_template = os.path.join(tmpdir, "subs")
         cmd = [
-            "yt-dlp",
+            "python3", "-m", "yt_dlp",
             "--write-auto-sub",
             "--write-sub",
             "--sub-lang", "en,es",
