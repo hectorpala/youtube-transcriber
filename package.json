@@ -13,8 +13,11 @@
   "dependencies": {
     "@base-ui/react": "^1.2.0",
     "@tanstack/react-table": "^8.21.3",
+    "@tauri-apps/plugin-notification": "^2.3.3",
+    "@tauri-apps/plugin-sql": "^2.4.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "lightweight-charts": "^5.1.0",
     "lucide-react": "^0.577.0",
     "next": "16.1.6",
     "react": "19.2.3",

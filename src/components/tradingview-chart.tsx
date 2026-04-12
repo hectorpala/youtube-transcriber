@@ -5,11 +5,13 @@ import { useEffect, useRef, memo } from "react";
 interface TradingViewChartProps {
   symbol?: string;
   height?: number | string;
+  interval?: string;
 }
 
 const TradingViewChart = memo(function TradingViewChart({
   symbol = "BINANCE:ETHUSDT",
   height = 240,
+  interval = "60",
 }: TradingViewChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -41,7 +43,7 @@ const TradingViewChart = memo(function TradingViewChart({
       width: "100%",
       height: "100%",
       autosize: true,
-      interval: "60",
+      interval: interval,
       timezone: "America/Mexico_City",
       theme: "dark",
       style: "1",
@@ -59,7 +61,7 @@ const TradingViewChart = memo(function TradingViewChart({
     return () => {
       if (container) container.innerHTML = "";
     };
-  }, [symbol]);
+  }, [symbol, interval]);
 
   return <div ref={containerRef} style={{ height, width: "100%" }} />;
 });

@@ -26,13 +26,13 @@ export function useBinancePrices(): { prices: PriceMap; status: ConnectionStatus
   const [prices, setPrices] = useState<PriceMap>({});
   const [socketOpen, setSocketOpen] = useState(false);
   const [lastTickAt, setLastTickAt] = useState(0);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Tick a clock every 2s so the status can transition to "stale"
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 2000);
+    const id = window.setInterval(() => setNow(Date.now()), 2000);
     return () => clearInterval(id);
   }, []);
 

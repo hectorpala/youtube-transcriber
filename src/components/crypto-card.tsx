@@ -1,15 +1,17 @@
 "use client";
 
 import { memo } from "react";
-import Link from "next/link";
 import type { Coin } from "@/lib/coins";
 import type { TickerData } from "@/hooks/use-binance-prices";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Star } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface CryptoCardProps {
   coin: Coin;
   ticker: TickerData | undefined;
+  isFavorite?: boolean;
+  onToggleFavorite?: (symbol: string) => void;
+  onSelect?: (coin: Coin) => void;
 }
 
 function formatPrice(price: number): string {
@@ -25,10 +27,20 @@ function formatVolume(vol: number): string {
   return vol.toFixed(0);
 }
 
-export const CryptoCard = memo(function CryptoCard({ coin, ticker }: CryptoCardProps) {
+export const CryptoCard = memo(function CryptoCard({ coin, ticker, isFavorite, onToggleFavorite, onSelect }: CryptoCardProps) {
+  const handleFavorite = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onToggleFavorite?.(coin.symbol);
+  };
+
+  const handleClick = () => {
+    onSelect?.(coin);
+  };
+
   if (!ticker) {
     return (
-      <Link href={`/chart?symbol=${coin.tradingViewSymbol}`}>
+      <div onClick={handleClick} className="cursor-pointer">
         <div className="group relative rounded-lg border border-border bg-card p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -48,7 +60,7 @@ export const CryptoCard = memo(function CryptoCard({ coin, ticker }: CryptoCardP
             <Skeleton className="h-1 w-full rounded-full" />
           </div>
         </div>
-      </Link>
+      </div>
     );
   }
 
@@ -58,13 +70,16 @@ export const CryptoCard = memo(function CryptoCard({ coin, ticker }: CryptoCardP
   const bgGlow = isUp ? "hover:border-profit/30" : isDown ? "hover:border-loss/30" : "hover:border-border";
 
   return (
-    <Link href={`/chart?symbol=${coin.tradingViewSymbol}`}>
+    <div onClick={handleClick} className="cursor-pointer">
       <div
-        className={`group relative rounded-lg border border-border bg-card p-4 transition-all hover:bg-card/80 ${bgGlow} cursor-pointer`}
+        className={`group relative rounded-lg border border-border bg-card p-4 transition-all hover:bg-card/80 ${bgGlow}`}
       >
         {/* Header: symbol + name */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
+            <button onClick={handleFavorite} className="text-muted-foreground hover:text-warning transition-colors">
+              <Star className={`h-3.5 w-3.5 ${isFavorite ? "fill-warning text-warning" : ""}`} />
+            </button>
             <span className="text-sm font-bold text-foreground">{coin.base}</span>
             <span className="text-xs text-muted-foreground">/USDT</span>
           </div>
@@ -119,6 +134,6 @@ export const CryptoCard = memo(function CryptoCard({ coin, ticker }: CryptoCardP
           </div>
         )}
       </div>
-    </Link>
+    </div>
   );
 });

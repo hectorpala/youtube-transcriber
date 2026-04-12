@@ -12,10 +12,12 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard } from "lucide-react";
+import { LayoutDashboard, History, Tv } from "lucide-react";
 
 const navItems = [
   { title: "Markets", href: "/", icon: LayoutDashboard },
+  { title: "Replay", href: "/replay", icon: History },
+  { title: "Channels", href: "/channels", icon: Tv },
 ];
 
 export function AppSidebar() {
