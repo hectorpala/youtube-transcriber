@@ -98,7 +98,7 @@ def transcribe_with_subtitles(video_url: str):
             "--cookies-from-browser", "chrome",
             "--write-auto-sub",
             "--write-sub",
-            "--sub-lang", "en,es",
+            "--sub-lang", "es,en",
             "--sub-format", "vtt",
             "--skip-download",
             "-o", out_template,
@@ -111,18 +111,21 @@ def transcribe_with_subtitles(video_url: str):
         if proc.returncode != 0:
             return None
 
-        # Look for subtitle files
-        for fname in os.listdir(tmpdir):
-            if fname.endswith(".vtt"):
-                vtt_path = os.path.join(tmpdir, fname)
-                text = parse_vtt(vtt_path)
-                if text and len(text) > 50:
-                    lang = "es" if ".es." in fname else "en"
-                    return {
-                        "text": text,
-                        "language": lang,
-                        "method": "youtube-subtitles",
-                    }
+        # Look for subtitle files, prefer Spanish
+        vtt_files = sorted(
+            [f for f in os.listdir(tmpdir) if f.endswith(".vtt")],
+            key=lambda f: (0 if ".es." in f else 1)
+        )
+        for fname in vtt_files:
+            vtt_path = os.path.join(tmpdir, fname)
+            text = parse_vtt(vtt_path)
+            if text and len(text) > 50:
+                lang = "es" if ".es." in fname else "en"
+                return {
+                    "text": text,
+                    "language": lang,
+                    "method": "youtube-subtitles",
+                }
 
     return None
 
