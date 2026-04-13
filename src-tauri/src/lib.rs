@@ -664,7 +664,17 @@ async fn export_channel(request: ExportRequest) -> Result<ExportResult, String> 
         let date_prefix = video.published_at.as_deref().unwrap_or("unknown-date");
         let title_slug = slugify(&video.title);
         let filename = format!("{date_prefix}_{title_slug}.md");
-        let filepath = channel_dir.join(&filename);
+
+        // Organize into transcripciones/YYYY/ subfolders
+        let year_folder = if date_prefix.len() >= 4 && date_prefix != "unknown-date" {
+            &date_prefix[..4]
+        } else {
+            "sin-fecha"
+        };
+        let year_dir = channel_dir.join("transcripciones").join(year_folder);
+        std::fs::create_dir_all(&year_dir)
+            .map_err(|e| format!("Failed to create year directory: {e}"))?;
+        let filepath = year_dir.join(&filename);
 
         // Skip if file already exists
         if filepath.exists() {
