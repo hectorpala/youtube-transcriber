@@ -107,9 +107,8 @@ def transcribe_with_subtitles(video_url: str):
             video_url,
         ]
 
-        proc = subprocess.run(cmd, capture_output=True, text=True)
-        if proc.returncode != 0:
-            return None
+        subprocess.run(cmd, capture_output=True, text=True)
+        # Ignore return code — yt-dlp may error on some langs but still download others
 
         # Only accept Spanish subtitles
         vtt_files = [f for f in os.listdir(tmpdir) if f.endswith(".vtt") and ".es." in f]
