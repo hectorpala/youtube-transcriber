@@ -265,7 +265,7 @@ export async function getNextPendingVideos(
 ): Promise<Video[]> {
   const d = await getDb();
   return d.select<Video[]>(
-    "SELECT * FROM videos WHERE channel_id = $1 AND status = 'pendiente' ORDER BY published_at ASC LIMIT $2",
+    "SELECT * FROM videos WHERE channel_id = $1 AND status = 'pendiente' ORDER BY (published_at IS NULL), published_at ASC LIMIT $2",
     [channelId, limit]
   );
 }
