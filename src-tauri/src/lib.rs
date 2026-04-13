@@ -617,6 +617,7 @@ struct ExportRequest {
 #[derive(serde::Serialize)]
 struct ExportResult {
     exported: u32,
+    skipped: u32,
     output_dir: String,
 }
 
@@ -657,12 +658,19 @@ async fn export_channel(request: ExportRequest) -> Result<ExportResult, String> 
         .map_err(|e| format!("Failed to create directory: {e}"))?;
 
     let mut exported: u32 = 0;
+    let mut skipped: u32 = 0;
 
     for video in &request.videos {
         let date_prefix = video.published_at.as_deref().unwrap_or("unknown-date");
         let title_slug = slugify(&video.title);
         let filename = format!("{date_prefix}_{title_slug}.md");
         let filepath = channel_dir.join(&filename);
+
+        // Skip if file already exists
+        if filepath.exists() {
+            skipped += 1;
+            continue;
+        }
 
         let duration_str = video
             .duration
@@ -712,6 +720,7 @@ tags: "{tags}"
 
     Ok(ExportResult {
         exported,
+        skipped,
         output_dir: channel_dir.to_string_lossy().to_string(),
     })
 }

@@ -464,7 +464,7 @@ function ExportButton({ channelId, channel }: { channelId: string; channel: Chan
       const homeDir = "/Users/openclaw/Desktop";
       const exportDir = `${homeDir}/youtube-transcriber-exports`;
 
-      const res = await invoke<{ exported: number; output_dir: string }>("export_channel", {
+      const res = await invoke<{ exported: number; skipped: number; output_dir: string }>("export_channel", {
         request: {
           channel_name: channel.name,
           channel_handle: channel.handle,
@@ -484,7 +484,8 @@ function ExportButton({ channelId, channel }: { channelId: string; channel: Chan
         },
       });
 
-      setResult(`Exported ${res.exported} files to ${res.output_dir}`);
+      const skipMsg = res.skipped > 0 ? ` (${res.skipped} already exported)` : "";
+      setResult(`Exported ${res.exported} new files${skipMsg}`);
     } catch (err) {
       setResult(`Error: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
