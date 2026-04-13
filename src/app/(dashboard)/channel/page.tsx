@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { useVideos } from "@/hooks/use-videos";
 import { useBatches } from "@/hooks/use-batches";
+import { invoke } from "@tauri-apps/api/core";
 import {
   type Channel,
   type Batch,
@@ -18,6 +19,7 @@ import {
   getChannel,
   hasActiveBatch,
   createBatchWithVideos,
+  getCompletedVideosWithText,
 } from "@/lib/db";
 import {
   ArrowLeft,
@@ -34,6 +36,7 @@ import {
   AlertCircle,
   Loader2,
   ChevronDown,
+  Download,
 } from "lucide-react";
 
 // ---------- Constants ----------
@@ -442,6 +445,68 @@ function BatchList({ channelId, batches }: { channelId: string; batches: Batch[]
   );
 }
 
+// ---------- Export button ----------
+
+function ExportButton({ channelId, channel }: { channelId: string; channel: Channel }) {
+  const [exporting, setExporting] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  const handleExport = useCallback(async () => {
+    setExporting(true);
+    setResult(null);
+    try {
+      const videos = await getCompletedVideosWithText(channelId);
+      if (videos.length === 0) {
+        setResult("No completed transcriptions to export.");
+        return;
+      }
+
+      const homeDir = "/Users/openclaw/Desktop";
+      const exportDir = `${homeDir}/youtube-transcriber-exports`;
+
+      const res = await invoke<{ exported: number; output_dir: string }>("export_channel", {
+        request: {
+          channel_name: channel.name,
+          channel_handle: channel.handle,
+          channel_url: channel.url,
+          output_dir: exportDir,
+          videos: videos.map(v => ({
+            id: v.id,
+            title: v.title,
+            url: v.url,
+            duration: v.duration,
+            published_at: v.published_at,
+            language: v.language,
+            transcription_method: v.transcription_method,
+            full_text: v.full_text ?? "",
+            tags: v.tags,
+          })),
+        },
+      });
+
+      setResult(`Exported ${res.exported} files to ${res.output_dir}`);
+    } catch (err) {
+      setResult(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setExporting(false);
+    }
+  }, [channelId, channel]);
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button size="sm" variant="outline" disabled={exporting} onClick={handleExport}>
+        {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+        <span>Export All</span>
+      </Button>
+      {result && (
+        <p className={`text-[10px] max-w-xs text-right ${result.startsWith("Error") ? "text-destructive" : "text-profit"}`}>
+          {result}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ---------- Main page ----------
 
 export default function ChannelDetailPage() {
@@ -568,10 +633,13 @@ export default function ChannelDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <PageHeader
-          title={channel.name}
-          description={`${channel.handle ?? channel.url} — ${channel.total_videos} videos`}
-        />
+        <div className="flex-1">
+          <PageHeader
+            title={channel.name}
+            description={`${channel.handle ?? channel.url} — ${channel.total_videos} videos`}
+          />
+        </div>
+        <ExportButton channelId={channelId} channel={channel} />
       </div>
 
       {/* Stats */}

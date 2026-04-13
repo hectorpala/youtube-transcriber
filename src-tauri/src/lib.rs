@@ -590,6 +590,132 @@ async fn transcribe_single(
     .map_err(|e| format!("Task join error: {e}"))?
 }
 
+// ---------- Export command ----------
+
+#[derive(serde::Deserialize)]
+struct ExportVideo {
+    id: String,
+    title: String,
+    url: String,
+    duration: Option<i64>,
+    published_at: Option<String>,
+    language: Option<String>,
+    transcription_method: Option<String>,
+    full_text: String,
+    tags: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct ExportRequest {
+    channel_name: String,
+    channel_handle: Option<String>,
+    channel_url: String,
+    output_dir: String,
+    videos: Vec<ExportVideo>,
+}
+
+#[derive(serde::Serialize)]
+struct ExportResult {
+    exported: u32,
+    output_dir: String,
+}
+
+fn slugify(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' || c == '_' {
+                c.to_ascii_lowercase()
+            } else if c == ' ' {
+                '-'
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>()
+        .chars()
+        .take(80)
+        .collect()
+}
+
+fn format_duration(seconds: i64) -> String {
+    let h = seconds / 3600;
+    let m = (seconds % 3600) / 60;
+    let s = seconds % 60;
+    if h > 0 {
+        format!("{h}h {m:02}m {s:02}s")
+    } else {
+        format!("{m}m {s:02}s")
+    }
+}
+
+#[tauri::command]
+async fn export_channel(request: ExportRequest) -> Result<ExportResult, String> {
+    let base_dir = std::path::PathBuf::from(&request.output_dir);
+    let channel_dir = base_dir.join(slugify(&request.channel_name));
+
+    std::fs::create_dir_all(&channel_dir)
+        .map_err(|e| format!("Failed to create directory: {e}"))?;
+
+    let mut exported: u32 = 0;
+
+    for video in &request.videos {
+        let date_prefix = video.published_at.as_deref().unwrap_or("unknown-date");
+        let title_slug = slugify(&video.title);
+        let filename = format!("{date_prefix}_{title_slug}.md");
+        let filepath = channel_dir.join(&filename);
+
+        let duration_str = video
+            .duration
+            .map(|d| format_duration(d))
+            .unwrap_or_else(|| "unknown".into());
+
+        let tags_str = video.tags.as_deref().unwrap_or("");
+
+        let content = format!(
+            r#"---
+channel: "{channel_name}"
+channel_handle: "{channel_handle}"
+channel_url: "{channel_url}"
+title: "{title}"
+video_id: "{video_id}"
+url: "{url}"
+date: "{date}"
+duration_seconds: {duration_raw}
+duration: "{duration}"
+language: "{language}"
+transcription_method: "{method}"
+tags: "{tags}"
+---
+
+{text}
+"#,
+            channel_name = request.channel_name,
+            channel_handle = request.channel_handle.as_deref().unwrap_or(""),
+            channel_url = request.channel_url,
+            title = video.title.replace('"', "'"),
+            video_id = video.id,
+            url = video.url,
+            date = date_prefix,
+            duration_raw = video.duration.unwrap_or(0),
+            duration = duration_str,
+            language = video.language.as_deref().unwrap_or("unknown"),
+            method = video.transcription_method.as_deref().unwrap_or("unknown"),
+            tags = tags_str,
+            text = video.full_text,
+        );
+
+        std::fs::write(&filepath, content)
+            .map_err(|e| format!("Failed to write {}: {e}", filename))?;
+
+        exported += 1;
+    }
+
+    Ok(ExportResult {
+        exported,
+        output_dir: channel_dir.to_string_lossy().to_string(),
+    })
+}
+
 // ---------- App entry ----------
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -680,6 +806,7 @@ pub fn run() {
             process_batch,
             signal_batch,
             transcribe_single,
+            export_channel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -460,6 +460,14 @@ export async function recalcBatchCounts(batchId: number): Promise<{ completed: n
   return { completed, failed };
 }
 
+export async function getCompletedVideosWithText(channelId: string): Promise<Video[]> {
+  const d = await getDb();
+  return d.select<Video[]>(
+    "SELECT * FROM videos WHERE channel_id = $1 AND status = 'completado' AND full_text IS NOT NULL ORDER BY published_at ASC",
+    [channelId]
+  );
+}
+
 export async function getPausedOrActiveBatches(): Promise<Batch[]> {
   const d = await getDb();
   return d.select<Batch[]>(
