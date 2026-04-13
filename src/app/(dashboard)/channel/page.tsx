@@ -461,8 +461,8 @@ function ExportButton({ channelId, channel }: { channelId: string; channel: Chan
         return;
       }
 
-      const homeDir = "/Users/openclaw/Desktop";
-      const exportDir = `${homeDir}/youtube-transcriber-exports`;
+      const homeDir = "/Users/openclaw/Documents";
+      const exportDir = `${homeDir}/trading-knowledge`;
 
       const res = await invoke<{ exported: number; skipped: number; output_dir: string }>("export_channel", {
         request: {
