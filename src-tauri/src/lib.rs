@@ -652,7 +652,8 @@ fn format_duration(seconds: i64) -> String {
 #[tauri::command]
 async fn export_channel(request: ExportRequest) -> Result<ExportResult, String> {
     let base_dir = std::path::PathBuf::from(&request.output_dir);
-    let channel_dir = base_dir.join(slugify(&request.channel_name));
+    let clean_name = request.channel_name.trim_start_matches('@');
+    let channel_dir = base_dir.join(clean_name);
 
     std::fs::create_dir_all(&channel_dir)
         .map_err(|e| format!("Failed to create directory: {e}"))?;
