@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { Suspense, useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
@@ -510,7 +510,23 @@ function ExportButton({ channelId, channel }: { channelId: string; channel: Chan
 
 // ---------- Main page ----------
 
-export default function ChannelDetailPage() {
+export default function ChannelDetailPageWrapper() {
+  return (
+    <Suspense fallback={
+      <>
+        <Skeleton className="h-7 w-48 mb-2" />
+        <Skeleton className="h-4 w-64 mb-6" />
+        <div className="grid grid-cols-5 gap-3 mb-6">
+          {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
+        </div>
+      </>
+    }>
+      <ChannelDetailPage />
+    </Suspense>
+  );
+}
+
+function ChannelDetailPage() {
   const searchParams = useSearchParams();
   const channelId = searchParams.get("id") ?? "";
   const router = useRouter();

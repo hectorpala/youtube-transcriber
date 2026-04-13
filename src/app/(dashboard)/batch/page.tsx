@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { invoke } from "@tauri-apps/api/core";
@@ -305,7 +305,21 @@ function BatchVideoRow({
 
 // ---------- Main page ----------
 
-export default function BatchViewPage() {
+export default function BatchViewPageWrapper() {
+  return (
+    <Suspense fallback={
+      <>
+        <Skeleton className="h-7 w-64 mb-2" />
+        <Skeleton className="h-4 w-96 mb-6" />
+        <Skeleton className="h-2 w-full mb-6" />
+      </>
+    }>
+      <BatchViewPage />
+    </Suspense>
+  );
+}
+
+function BatchViewPage() {
   const searchParams = useSearchParams();
   const channelId = searchParams.get("channelId") ?? "";
   const batchId = parseInt(searchParams.get("batchId") ?? "0", 10);
