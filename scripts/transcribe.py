@@ -111,19 +111,15 @@ def transcribe_with_subtitles(video_url: str):
         if proc.returncode != 0:
             return None
 
-        # Look for subtitle files, prefer Spanish
-        vtt_files = sorted(
-            [f for f in os.listdir(tmpdir) if f.endswith(".vtt")],
-            key=lambda f: (0 if ".es." in f else 1)
-        )
+        # Only accept Spanish subtitles
+        vtt_files = [f for f in os.listdir(tmpdir) if f.endswith(".vtt") and ".es." in f]
         for fname in vtt_files:
             vtt_path = os.path.join(tmpdir, fname)
             text = parse_vtt(vtt_path)
             if text and len(text) > 50:
-                lang = "es" if ".es." in fname else "en"
                 return {
                     "text": text,
-                    "language": lang,
+                    "language": "es",
                     "method": "youtube-subtitles",
                 }
 
@@ -155,7 +151,7 @@ def main():
     parser = argparse.ArgumentParser(description="Transcribe a YouTube video")
     parser.add_argument("video_url", help="YouTube video URL")
     parser.add_argument("--model", default="base", help="Whisper model (tiny/base/small/medium/large)")
-    parser.add_argument("--language", default=None, help="Language hint (e.g., en, es)")
+    parser.add_argument("--language", default="es", help="Language hint (e.g., en, es)")
     parser.add_argument("--skip-subtitles", action="store_true", help="Skip subtitle check, go straight to whisper")
     args = parser.parse_args()
 

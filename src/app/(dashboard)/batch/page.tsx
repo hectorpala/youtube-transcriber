@@ -250,9 +250,16 @@ function BatchVideoRow({
           <p className="text-xs text-destructive mt-0.5 truncate">{video.error_message}</p>
         )}
         {video.status === "completado" && video.full_text && !isCurrent && (
-          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
-            {video.full_text.slice(0, 120)}...
-          </p>
+          <div className="mt-0.5">
+            <p className="text-[11px] text-muted-foreground line-clamp-1">
+              {video.full_text.slice(0, 120)}...
+            </p>
+            {video.language && (
+              <span className={`text-[10px] ${video.language !== "es" ? "text-warning" : "text-muted-foreground"}`}>
+                {video.language !== "es" ? `lang: ${video.language}` : ""}
+              </span>
+            )}
+          </div>
         )}
       </div>
 
@@ -270,6 +277,22 @@ function BatchVideoRow({
               <RotateCcw className="h-3 w-3" />
             )}
             <span>Retry</span>
+          </Button>
+        )}
+        {video.status === "completado" && (
+          <Button
+            size="xs"
+            variant="ghost"
+            disabled={isRetrying}
+            onClick={() => onRetry(video)}
+            title="Re-transcribe this video"
+          >
+            {isRetrying ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RotateCcw className="h-3 w-3" />
+            )}
+            <span>Re-transcribe</span>
           </Button>
         )}
         <Badge variant={isCurrent ? "default" : (BATCH_STATUS_BADGE[video.status]?.variant ?? "outline")}>
