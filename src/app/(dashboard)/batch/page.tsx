@@ -660,8 +660,8 @@ function BatchViewPage() {
 
       {/* Stats + controls */}
       <div className="rounded-lg border border-border bg-card p-4 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
+        <div className="mb-4">
+          <div className="flex items-center gap-3 mb-3">
             <Package className="h-5 w-5 text-primary" />
             <div>
               <div className="flex items-center gap-2">
@@ -676,26 +676,26 @@ function BatchViewPage() {
 
           <div className="flex items-center gap-2">
             {canStart && (
-              <Button size="sm" onClick={handleStart}>
-                <Play className="h-3.5 w-3.5" />
-                <span>Start</span>
+              <Button onClick={handleStart}>
+                <Play className="h-4 w-4" />
+                <span>Start Batch</span>
               </Button>
             )}
             {canResume && (
-              <Button size="sm" onClick={handleResume}>
-                <Play className="h-3.5 w-3.5" />
-                <span>Resume</span>
+              <Button onClick={handleResume}>
+                <Play className="h-4 w-4" />
+                <span>Resume Batch</span>
               </Button>
             )}
             {canPause && (
-              <Button size="sm" variant="secondary" onClick={handlePause}>
-                <Pause className="h-3.5 w-3.5" />
+              <Button variant="secondary" onClick={handlePause}>
+                <Pause className="h-4 w-4" />
                 <span>Pause</span>
               </Button>
             )}
             {canCancel && (
-              <Button size="sm" variant="destructive" onClick={handleCancel}>
-                <XCircle className="h-3.5 w-3.5" />
+              <Button variant="destructive" onClick={handleCancel}>
+                <XCircle className="h-4 w-4" />
                 <span>Cancel</span>
               </Button>
             )}
