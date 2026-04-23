@@ -1,0 +1,43 @@
+{
+  "description": "BTC-USDT · contexto válido pero stop ejecutado hace <4h (cooldown I003 hard_blocker). Debe producir decision=no_trade con I003 en blocking_rule_ids.",
+  "expected_decision": "no_trade",
+  "expected_blocking_rule_ids": ["I003"],
+  "snapshot": {
+    "symbol": "BTC-USDT",
+    "as_of": 1776830400000,
+    "flags": {
+      "position_open": false,
+      "last_stop_timestamp": 1776822000000
+    },
+    "portfolio": {"capital_usd": 15000},
+    "timeframes": {
+      "1W": {
+        "timeframe": "1W",
+        "bars": [],
+        "indicators": {"mm55": 65000, "mm55_prev": 64500, "adx": 28.0, "adx_prev": 26.0}
+      },
+      "1D": {
+        "timeframe": "1D",
+        "bars": [],
+        "indicators": {"mm55": 68000, "mm55_prev": 67600, "adx": 25.0, "adx_prev": 24.0}
+      },
+      "4H": {
+        "timeframe": "4H",
+        "bars": [
+          {"timestamp": 1776700800000, "open": 73900, "high": 74200, "low": 73100, "close": 73400, "volume": 900},
+          {"timestamp": 1776715200000, "open": 73400, "high": 73600, "low": 71800, "close": 72000, "volume": 850},
+          {"timestamp": 1776729600000, "open": 72000, "high": 72200, "low": 70600, "close": 70800, "volume": 1000},
+          {"timestamp": 1776744000000, "open": 70800, "high": 71300, "low": 70500, "close": 70600, "volume": 800},
+          {"timestamp": 1776758400000, "open": 70600, "high": 71400, "low": 70400, "close": 71300, "volume": 900},
+          {"timestamp": 1776772800000, "open": 71300, "high": 72200, "low": 71100, "close": 72100, "volume": 950},
+          {"timestamp": 1776787200000, "open": 72100, "high": 73500, "low": 72000, "close": 73400, "volume": 1100}
+        ],
+        "indicators": {
+          "mm55": 70500, "mm55_prev": 70400,
+          "adx": 24.0, "adx_prev": 23.0,
+          "poc": 71000, "atr": 900, "volume_sma20": 1050
+        }
+      }
+    }
+  }
+}

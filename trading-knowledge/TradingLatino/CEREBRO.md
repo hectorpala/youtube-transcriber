@@ -1,0 +1,707 @@
+# Cerebro del trader
+
+## Perfil del trader
+Jaime de Trading Latino. Trader de criptomonedas con enfoque en análisis técnico multi-temporal (1H, 4H, diario, semanal, mensual). Combina Elliott, Wyckoff y grid trading. Estilo didáctico, conservador en apalancamiento, prioriza gestión de capital sobre direccionalidad. Opera spot y futuros con stops definidos; también toma posiciones en índices (SP500, Dow Jones) y acciones puntuales (AAPL, TSLA, HCA, MSTR, Ford, Intel). No opera shorts en cripto cuando va contra la tendencia mayor, pero sí en altcoins cuando BTC diverge de ellas. Ignora deliberadamente narrativas macro (ej. aranceles Trump-China, guerra geopolítica, lanzamiento de Bakkt) y se enfoca solo en análisis técnico. Usa bot de IA propio llamado "Satoshi" para gestionar algunas posiciones long. Utiliza paper trading para testear ideas de short especulativo sin arriesgar capital real. Crítico con sugerencias de ChatGPT en selección de altcoins. Reconoce que los breakouts de rango los operan bots con 50x-100x, por eso el trader retail debe evitar alto apalancamiento. Históricamente operó BitMEX, Bybit, Kraken, Bitfinex, Binance, BingX y CoinFLEX; prefiere Bitfinex y Bybit sobre Kraken y BitMEX por manipulación documentada (vela 7,989-12,019 USD en Kraken sept 2019, vela a $19 en BitFinex/Binance, mecha a $15K en derivados Bitfinex). Advierte sobre estafadores que venden membresías vitalicias usando su nombre. Recomienda aprender la estrategia y aplicarla en mercados más líquidos (acciones, oro) por menor manipulación que cripto.
+
+## Indicadores que utiliza
+- **Medias móviles**: cruce en semanal/mensual como señal de cambio de tendencia; MM 55 periodos en diario/semanal/4H ("marrón") como referencia clave de tendencia, techo, soporte dinámico, zona de recompra, confirmación de rango/"boxes" y zona de retroceso para entradas long (ej. PENDLE); EMA 10 ("azul") para tendencia corto plazo; en bajista los rebotes apuntan a la marrón antes de continuar cayendo; tras cruce alcista de medias en diario, primer toque precio/azul a la marrón suele rechazar = oportunidad short corto antes de continuación alcista mayor; EMA 20 también referencia clave de rebote en 1H/45min (visto en 87 videos)
+- **Ondas de Elliott**: estructura A-B-C para correcciones y bull traps; extensión Fib 1.618 para proyectar onda C; final de onda 5 anticipa corrección ABC; ondas 1-5 en impulsos completos; variante "pauta plana ABC de continuación" alcista (onda C tocando MM55+POC sin fuerza bajista = setup long); también pauta plana de continuación bajista; onda C en lateral necesita tiempo de consolidación; máximo de onda C como target de salida; subestructura 0A-AB-0B / XY dentro de lateral; esperar onda C antes de long en futuros cuando hay onda B; onda 1-2 en semanal como marco de continuación; pauta plana ABC también usada como continuación bajista (ondas 1-2-3 con onda 3 como target) (visto en 68 videos)
+- **Wyckoff**: análisis de acumulación/distribución (visto en 5 videos)
+- **Patrones técnicos**: doble suelo, doble techo, M y W, rompe y apoya, falsa ruptura, quiebre de estructura, bajos más altos/bajos como validación; suelo redondeado + cruce MM azul sobre marrón sin romperla en primer retroceso = inicio de alt season; hombro-cabeza-hombro invertido; triángulos de consolidación; pin bar, envolventes y mechas de rechazo (visto en 21 videos)
+- **Análisis fractal**: confluencia entre 4H, diario, semanal y mensual; fractal semanal→diario para anticipar tejoden; fractal de pauta plana ABC 4H replicando patrón semanal BTC 2023 desde $25K (visto en 4 videos)
+- **Índice de miedo y codicia**: sentimiento de mercado; zona codicia ≥64 coincide con techo de rango; extrema avaricia como señal de que ballenas ("el chinito") barrerán minoristas sobreapalancados (visto en 3 videos)
+- **Divergencia**: bajista (precio vs RSI/MACD en diario/4H/1H) anticipa rango-caída, doble techo y quiebre de estructura; alcista (oro 1H, Apple, BTC 1H, NANO, osciladores varios) señal de rebote; divergencia en "sistema" propio para anticipar long tras barrido de liquidez; divergencia bajista en oro tras tope de $1,556 (visto en 21 videos)
+- **ADX / Monitor con ADX superpuesto ("Valle Verde", config personal)**: mide fuerza/pendiente de tendencia; pendiente positiva/negativa para validar momentum; pendiente positiva en 1H/4H bajista = aún queda caída; pendiente negativa señala agotamiento; referencia punto 0.23 (también citado como punto 23 o punto 20); herramienta clave para anticipar formación de laterales antes de que se confirmen; mencionado como ejemplo de que ningún indicador adelanta al precio; pendiente negativa en semanal confirma formación de rango lateral amplio; ADX <23 con MACD tocando cero sin que baje precio = señal alcista (visto en 88 videos)
+- **RSI**: usado para lectura de sobreventa relativa entre temporalidades; divergencia alcista en RSI sobrevendido como señal de rebote en BTC; en tendencia bajista fuerte el RSI no sirve (todo sobrevendido), solo útil en rangos (visto en 14 videos)
+- **MACD**: indicador de momentum, divergencias, debilidad alcista; cruces poco confiables en caídas violentas; útil para detectar convergencia alcista en 1H (visto en 37 videos)
+- **OBV Monitor**: indicador propio principal para medir fuerza del movimiento; entrada long con segunda vela verde tras consolidación
+- **Awesome Oscillator (histograma verde/rojo)**: usado como "monitor" propio para confirmar fuerza/momentum
+- **Parabolic SAR**: mencionado para scalping, no usado de forma habitual
+- **Squeeze Momentum**: indicador de volatilidad lento, apoyo para confirmar compresión y fin de tramos direccionales (en video 2025-07-13 lo calificó como obsoleto y sugirió reemplazarlo por Estocástico); Cruces negras = compresión, Bollinger dentro de Keltner
+- **Estocástico**: propuesto como reemplazo moderno del Squeeze Momentum
+- **Campana de Gauss / Monitor de valles (perfil de volumen propio)**: valle azul y valle rojo como zonas de decisión para entradas/stops en 4H; VAH y VAL como límites del área de valor; usado también como "monitor de valles rojos/verdes" (sistema propio de debilidad/fuerza) (visto en 7 videos)
+- **Perfil de Volumen de Rango Fijo (VRVP, azul)**: identificación de POC y zonas sin volumen dentro de laterales; zona media sin volumen = no operar; también VPVR y VPSR (perfil por sesión); también usado en lateral derecho de TradingView para scalping intradía (visto en 4 videos)
+- **Point of Control (POC / VPOC)**: línea horizontal blanca; referencia de stop por debajo junto con valle azul; confluencia con MM55 valida zona de entrada; usado junto a VAH/VAL; POC en centro del lateral marca zona vacía a evitar; cruce del POC = posible cambio direccional; stop 8% bajo POC en setups alt diarios (visto en 42 videos)
+- **Fibonacci**: nivel 0.52 referencia; extensión 1.618 para proyectar onda C (en video 2025-07-13 rechazó Fibonacci puro en cripto por considerarlo poco útil sin contexto de manipulación/volumen — contradicción parcial) (visto en 9 videos)
+- **TPV (Tiempo, Precio y Volumen)**: marco conceptual propio para leer el mercado más allá de indicadores clásicos
+- **Volumen**: validación de absorción, zonas de parada y dominancia vendedora/compradora; bajo volumen en eventos como Bakkt = mercado indiferente a narrativa
+- **Análisis de velas**: pinbar con rechazo del 70% como señal de fin de caída; vela verde final proyectada marca agotamiento alcista corto; doble techo/doble suelo como reversión; envolventes y mechas de rechazo en zonas de soporte/resistencia (visto en 15 videos)
+- **Líneas de tendencia**: quiebre confirma cambio real cuando va acompañado de volumen (visto en 3 videos)
+- **Patrón "tejoden" / "me joden"**: concepto propio — barrido de liquidez en máximos/mínimos del rango antes de movimiento real; zona no operable hasta que se resuelva; tras ruptura alcista falsa con mechazo (ej. $74,200) suele formarse lateral antes de continuar; también aparece como cuña correctiva en 5min antes del giro alcista (visto en 5 videos)
+- **Cruce de la muerte (death cross)**: titular de video, usado para analizar cambio de tendencia en medias mayores
+- **Identificación de clusters de liquidez (stop loss clusters)**: anticipar barridos en mínimos/máximos donde se acumulan stops (visto en 4 videos)
+- **Gap del CME en futuros BTC**: gap pendiente actúa como imán/objetivo del precio (ej. gap $8,200 sept 2019 marcó target bajista durante meses) (visto en 4 videos)
+- **Dominancia BTC**: medida de rotación capital BTC↔altcoins; máximo ~70% sugiere rotación esperada hacia 52-55% redistribuyendo a altcoins
+- **Long/Short ratios y liquidaciones**: monitoreo de sobreapalancamiento para anticipar barridos de liquidez antes de movimientos reales
+- **Triple Pantalla de Alexander Elder**: alinear temporalidades (semanal tendencia primaria, diario secundaria, 4H/1H entrada)
+- **Order flow / Tensorcharts**: lectura de libro de órdenes y órdenes grandes para detectar operadores institucionales
+- **Bandas de Bollinger**: mencionado como herramienta adicional, no uso principal; recomendado para scalping en altcoins respetando soporte horizontal; ajustar a 30 periodos en cripto por operativa 24/7 vs 20 estándar (visto en 10 videos)
+- **EMA 9 / EMA 20**: cruce de EMA 9 (amarilla) bajo EMA 20 (blanca) como señal de confirmación bajista; soporte/resistencia dinámica intradía (visto en 3 videos)
+- **Heatmap / libro de órdenes**: identificar paredes de compra/venta y manipulación de ballenas antes de movimientos bruscos
+- **Ratio long/short igualado**: ambos ratios por el suelo simultáneamente = señal de indecisión, mejor no operar
+- **Trailing stop dinámico configurable en BitMEX**: trailing buy de $30 sobre precio en short, o $3 sobre precio en long ETH 1H — herramienta de gestión activa para dejar correr ganancias
+- **Cuña bajista descendente con máximos descendentes**: estructura de consolidación con rebote interno (onda B de pauta plana ABC) antes de ruptura bajista hacia target proyectado
+- **Estocástico con canal morado personalizado**: entrada cuando sale del canal por abajo + cruce de regreso al alza; salida en cruce bajista desde sobrecompra; confirmación conjunta con Bollinger + MACD
+- **Screener de TradingView (Crypto Screener)**: filtrar señales de altcoins en top 500 CoinMarketCap combinando Bollinger + estocástico
+- **EMA exponencial 50 periodos**: referencia de tendencia en scalping BTC/USDT temporalidades 5-15min
+- **Canal de Keltner**: usado junto a Bandas de Bollinger para confirmar squeeze (Bollinger dentro de Keltner = volatilidad baja antes de ruptura)
+- **EMA 100**: media móvil única de referencia para análisis de largo plazo en BTC (4H/diario), sin combinar con MM55/EMA20 de corto
+- **Market Profile con flip/POC + áreas de valor (PPSV)**: flip como punto de negociación principal; entrada solo al romper área de valor con volumen y patrón confirmación (envolvente/penetrante/pin bar) fuera del área
+
+## Estrategias / Setups identificados
+- **Grid trading neutral / Spot Infinity Grid**: en rangos laterales confirmados (BTC 17K-20.5K, 28-24K, 106,700-110,100 BingX jul 2025). Plataformas: BingX, Vinx, Bitvex. Stop en parte baja del rango. Setup BTC Spot Infinity: solo BTC, precio más bajo $63K, ganancia por grid 2% (0.5% baja volatilidad). Apertura: retroceso a $64-66K o mantenerse >$67K una semana. NO abrir en zona tejoden ni perseguir precio. Histórico: XRP dio ganancias recientes con grid pero ya no es zona; grid futuros 10x BTC en lateral $69,100-$73,000 generó ~$130/día y 105 ops en 2 días; grid futuros 10x BTC rango $60K-$70K como ingreso pasivo durante lateral largo (visto en 18 videos)
+- **Acumulación escalonada en soportes profundos / DCA**: dividir capital en tramos (20% cada 5K USD de caída desde 26K; tramos en 28-24K, 21K, 15.5K, 9K extremo). Paciencia > adivinar mínimo; comprar media posición (20%) en zona actual, dejar segunda entrada más abajo; plan recompra en "zonas de sangre"; escalar 3% inicial, sumar 5% en ganancia, mover stop a breakeven; ejemplo BTC oct 2018: compras 6,125/6,000/5,900/5,700 USD; DCA por tramos de precio (no por fechas): tramo en <$40K tras compra previa en $68K; DCA BTC en tramos de -$10K-$25K, no cada -$5K; reservar 40% para compra final (visto en 26 videos)
+- **Comprar pánico / vender euforia en spot**: tras caídas extremas, comprar BTC y altcoins principales sin apalancamiento cuando hay miedo (ej. BTC $8,100-$8,200 con gap CME, $65-77K, $19,650), vender en rebote/euforia; "comprar cuando la gente vende"; aplica para holdings de horizonte 3+ meses (visto en 9 videos)
+- **Acumulación spot largo plazo en altcoins establecidas**: ETH, LTC, XLM, ADA, ALGO sin apalancamiento, horizonte 3+ meses; aceptar drawdowns esperando ciclos largos (visto en 10 videos)
+- **Venta parcial en falsas rupturas / zonas de salida**: descargar en resistencia clave cuando se anticipa bull trap dentro de corrección mayor; tomar ganancias al llegar al doble techo; quien compró BTC barato vende en zona alta del lateral y protege; plan de venta parcial 50% si hay caída fuerte para recomprar más abajo; NO comprar spot arriba del lateral tras rally (visto en 13 videos)
+- **Convertir a USDT/USDC para congelar capital antes de caída esperada**: salir parcialmente del mercado en zonas de venta para recomprar más abajo (ej. BTC ~$10,200 sept 2019); congelar 25% en USDT para recomprar más barato y acumular satoshis; escalonado 25/25/25/15% en niveles rally (8.5K/8.7K/9.5K/10K); congelar 25% en $8,600 como ganancia asegurada sin cerrar todo (visto en 17 videos)
+- **Protección post-compra / stop a break-even positivo**: mover activo a exchange con orden límite venta ~$500 sobre precio compra; subir stop a break-even con ganancia mínima (ej. entrada BTC $78,708 → stop $78,900) para asegurar sin cerrar; trailing stop manual: +3% mover a BE, +7% mover a +5%, luego trailing 4-4.5%; subir stop a BE apenas el precio avance, salir y reentrar más abajo si rompe (visto en 14 videos)
+- **Duplicar posición ganadora**: solo cuando ya está en ganancia y tras mover stop al precio que protege la entrada combinada (break-even del doble) — NUNCA promediar en contra
+- **Futuros BTC con SL fijo**: long en 4H con apalancamiento 5-10x y stop típico 1.5-2% (10-20% con apalancamiento). Ejemplo fallido: long 23.900, SL 24.325. Ejemplo ganador: long $78,708 10x (+22%) target $83-84K. Setup estándar: entrada tras valle rojo en 4H (o pauta plana ABC tocando MM55+POC), SL debajo de valle azul + POC / MM55, TP bajo máximo previo 4H o máximo de onda C. Cerrar longs con vela verde final + divergencia bajista + quiebre de estructura en 4H (visto en 11 videos)
+- **BTC long intradía con OBV Monitor**: entrada en segunda vela verde tras consolidación lateral (ej. desde $10,300 a $10,500-10,600 antes de evaluar short), operación pequeña buscando $50-$80 de ganancia
+- **Long BTC futuros en 1H dentro de lateral**: entrada en parte baja del lateral (~$111,700-$112,000), target parte alta ($113,000), temporalidad 1H ~10h; cerrar al llegar a resistencia; solo long, evitar shorts (visto en 7 videos)
+- **Operar lateral 4H con sesgo bajista**: cuando 4H/1H son bajistas dentro de lateral diario mayor, buscar shorts hacia parte baja del lateral 4H y rotar a long en diario; evitar centro del lateral (POC sin volumen); short en zona alta + long en zona baja con stop generoso 4-5%, asumiendo eventual ruptura (visto en 6 videos)
+- **Short especulativo BTC 4H en zona de lateral proyectado**: entrada short desde ~$73K con stop 2%, esperando onda B dentro de lateral anticipado por ADX; solo en 4H, nunca en diario; ejecutable en paper trading (visto en 4 videos)
+- **Perpetual BTC conservador**: máximo 3x-5x, solo BTC, mantener precio de liquidación en cero; hasta 10x permitido en BTC/oro (en video 2025-04-13 cruce de la muerte ejecutó BTC 10x con $2 de capital y oro 20x, excepción con capital simbólico) (visto en 3 videos)
+- **Short macro en índices**: SP500 short 5x semanal cuando patrón bajista confirmado (entrada ~3.970); Nasdaq tras susto ya no operable
+- **Short BTC futuros en escenario bajista**: apalancamiento bajo 3x, nunca 20x; setup recurrente en sept 2019 con entradas $10,200-$10,310 y target $8,200 (gap CME); shorts BTC/ETH/XVG en marzo 2019 con apalancamiento 10x BTC, 5x ETH desde $3,885-$3,900 target $3,650-$3,665; ene 2019: shorts BTC desde $3,575/$3,680/$3,850 target $3,200; pauta plana ABC en 4H como timing (visto en 22 videos)
+- **Short selectivo en altcoins mientras BTC sigue alcista mayor**: cuando una altcoin forma divergencia bajista propia (BNB, HBAR, ADA, XRP, DOGE) se cierran longs y se buscan shorts (incluso paper trading), PERO nunca short BTC contra tendencia mayor; tampoco shortear activos con fuerza alcista probada (AERGO/RUNY, PENDLE); shortear altcoins contra BTC cuando BTC sube con fuerza (los satoshis se revalorizan) (visto en 12 videos)
+- **Long en retroceso a MM55 (ej. PENDLE)**: esperar retroceso a MM55 en 1H/15min por la parte baja del rango; NUNCA entrar long en parte alta; NUNCA shortear activos alcistas con stop 2% (visto en 8 videos)
+- **Long en metales tras divergencia**: oro long en apertura de semana con confirmación 4H/1H tras llegar a zona de compra; plata en doble suelo diario, esperar retroceso para entrada; oro operable sin SL con apalancamiento bajo; plata alcista en 4H/1H operable long; tolerar drawdowns moderados (~5%) (visto en 5 videos)
+- **Short en metales tras agotamiento alcista**: short parcial oro hacia target predefinido y cancelar cuando 1H gira alcista; short plata cerrado tras objetivo (-8.13%) (visto en 2 videos)
+- **Long acciones en rebote**: AAPL zona 180 en 4H (mejor 165), TSLA ~200; MSTR acumulación con horizonte 2028
+- **Filtro por stop amplio**: si stop natural queda excesivo (SOL 9.38%, FET 5% con 3x = 15% riesgo) no entrar; preferir activos con stop ajustado; stop 2% estándar en BTC, oro y criptos con capitalización suficiente (visto en 7 videos)
+- **Scalping 1-5 min en activos solo alcistas**: AKT, MONAD, únicamente a favor del movimiento mayor; también scalping short rápido en BTC con momentum bajista fuerte (10x BitMEX, ~10 min, +$107) (visto en 2 videos)
+- **Post-stop discipline**: tras perder stop NO reentrar ni doblar; esperar nueva señal (visto en 2 videos)
+- **Zona no operable**: BTC estancado en mitad del rango o tejoden en máximos = no operar; lateral esperado 48h antes de retomar dirección; activos sin setup claro descartar; durante onda B en 1H aguardar fin de semana; centro del lateral (POC vacía) no operable; en alta volatilidad no inventar entradas (visto en 33 videos)
+- **Priorización de activos**: priorizar BTC, ETH y oro sobre altcoins especulativas en futuros (visto en 2 videos)
+- **Rotación de liquidez**: liquidar posiciones estancadas en altcoins para liberar capital hacia setups activos; también vender ganadoras para aguantar rezagadas si se anticipa corrección BTC
+- **Futuros aislado sin stop en acciones con sesgo alcista probabilístico (70/30)**: permitido en valores como PLSRB donde semanal sugiere lateral/caída pero diario alcista — operar al alza en aislado sin stop (apuesta probabilística); también NEXO/BTC sin stop por manipulación, solo TP
+- **Operar el rango con compra-abajo/venta-arriba sin apalancamiento**: en rangos semanales amplios (BTC 8.2K-11.4K), comprar parte baja y vender parte alta para acumular más BTC con mismo capital, sin forzar ruptura
+- **Evitar niveles psicológicos terminados en "700" / "000"**: zonas de barrido de liquidez sobre stops; no operar entradas exactas en esos niveles, esperar barrido antes de entrar
+- **Rebote técnico de altcoins (3-5 días, 15-25%)**: operar selectivamente con stop, sabiendo que es rebote dentro de bajista mayor, no inicio de altseason; entrada tras pullback a MM55 en 4H con ADX positivo
+- **Entrada long fraccionada en pauta plana ABC**: mitad en onda C, completar al romper línea 0-B con stop bajo mínimo de onda A; variante short: 50% en precio actual, 50% al romper POC 4H con patrón confirmación (visto en 4 videos)
+- **Operar altcoins solo contra USD en correcciones de BTC**: evitar pares ALT/BTC cuando BTC corrige para reducir doble riesgo (visto en 4 videos)
+- **Short swing BTC dividido en 20 partes**: posición abierta sin recompras, esperando ciclo bajista semanal mayor
+- **No usar take profits fijos en cripto**: dejar correr ganancias moviendo stop loss progresivamente; cripto da movimientos grandes que se pierden con TP fijo (visto en 2 videos)
+- **Anticipar liquidación de longs sobreapalancados (25x-50x) antes de entrada long**: esperar barrido de stops antes de comprar en zona de soporte (ej. BTC $3,650-$3,675 marzo 2019) (visto en 8 videos)
+- **Trailing stop dinámico de $10-$15 en BTC** tras posición long ganadora para asegurar ganancias sin cerrar manualmente (visto en 5 videos)
+- **Compras escalonadas tras short cumplido**: tras short BTC desde $3,830 target $3,680 cumplido, plan de recompra long en 3,680 / 3,500 / 3,200 USD (visto en 3 videos)
+- **Long XRP contra-BTC en barrida de liquidaciones**: mantener long XRP en pérdida cuando se interpreta como barrido de liquidez previo a rebote, mientras BTC sigue bajista (ene 2019)
+- **No operar BTC el fin de semana aunque haya setup**: identificar setup short pero abstenerse durante fin de semana por baja liquidez/manipulación (visto en 3 videos)
+- **Operar correlación inversa BTC-XRP simultáneamente**: short BTC + long XRP cuando XRP se desacopla alcista de BTC bajista, aprovechando ambos lados del mercado
+- **Recompras escalonadas en lugar de stop loss en BitMEX**: argumento de cacería de liquidaciones; usa órdenes limit de recompra para promediar entrada en vez de SL fijo; duplicar tamaño en cada recompra (500→1000) manteniendo liquidación por encima (visto en 5 videos)
+- **Vender 50% al pasar a verde tras recompras**: regla del manual — recuperar margen de maniobra tras operación recuperada, mantener el 50% restante para target
+- **Dividir capital en 10 partes de 0.1 BTC para operar BitMEX**: permite hasta 10 entradas/recompras escalonadas sin comprometer liquidación
+- **Scalping short 1H en rebote dentro de tendencia bajista**: entrada en rebote (no en plena caída), objetivo 6-10% en 40-45 min, nunca short en plena caída ni long en plena subida (visto en 2 videos)
+- **Scalping cripto en 5-15 min con Bollinger + Estocástico + MACD**: entrada long en banda inferior Bollinger + estocástico saliendo de sobreventa con cruce alcista; entrada short en banda superior + estocástico en sobrecompra con cruce bajista; salida al tocar banda opuesta con confirmación MACD; nunca operar en 1 min
+- **Entrada en rebote con stop limit por encima del soporte (longs)**: nunca colocar orden justo en el soporte porque el precio puede atravesarlo; esperar confirmación de rebote antes de ejecutar
+- **Entrada en ruptura tras cierre de vela**: orden ligeramente por encima del nivel roto, nunca antes del cierre; evitar adelantar rupturas sin confirmación
+- **Scalping intradía altcoins top 500 CMC con objetivo 3-20%**: filtrar con screener TradingView, stop 10%, stop limit móvil para dejar correr ganadores, tomar 12-15% típico
+- **Long rebote técnico BTC tras caída a banda inferior Bollinger**: entrar solo con vela de rechazo (precio ya detenido), NO al primer toque; target 1 SMA20 cierre 50%, target 2 banda superior con vela 2H de ruptura; 7-10% típico
+- **Congelar BTC en USDT cuando USDT cae a descuento ($0.96-0.97)**: doble ganancia al recomprar BTC más barato y recuperar paridad USDT; ejecutado 15-oct-2018 vendiendo $6,892 y recomprando más abajo
+- **Scalping con orden desde TradingView vía API a Poloniex**: ejecutar trades sin salir del gráfico; cantidad ejemplo 0.02-0.05 BTC; operar pares contra USDT no contra BTC para preservar valor en dólares
+- **Practicar setup 20-30 veces en paper trading antes de usar capital real**: regla didáctica del taller de scalping para interiorizar la confluencia Bollinger+Estocástico+MACD
+- **Short de protección sin riesgo de liquidación en BitMEX**: 50,000 contratos como cobertura de cartera mientras se opera el rango
+- **Cobertura de pool de liquidez con short automatizado del activo (ETH/USDC)**: short 10x sobre el activo del pool que se activa al salir del rango por arriba; al cerrar el pool, usar la ganancia del short para recomprar más unidades del activo (recupera impermanent loss) (visto en 2 videos)
+- **Usar ETH como vehículo de cobertura short en lugar de BTC**: cuando se quiere short el mercado sin ir contra la tendencia mayor de BTC, se usa ETH (par de igual liquidez) para la cobertura direccional
+- **Entrada en oro/plata tras retroceso con mecha grande**: NO entrar en la vela inmediata al rechazo; esperar a que cierre la vela roja siguiente y entrar después, evita barrido de stops por mecha de continuación
+- **Pool de liquidez DEX (Uniswap/Arbitrum) con cobertura short automatizada**: rango ETH/USDC o BTC/USDC; al salir el precio por abajo se activa short 10x con ~10% del capital del pool vía API (Hyperliquid) para cubrir impermanent loss; al volver al rango se cancela el short; Pool BTC/USDT rango 65,633-72,608 con $38K genera ~$130/día; Preferir ETH sobre BTC como activo del pool (visto en 5 videos)
+- **Pool de liquidez USDC/USDT en rango estrecho**: pool entre stablecoins para cobrar comisiones de swaps sin riesgo direccional
+- **Pool ETH/BTC como rebalanceo automático**: si el par sube se sale en ETH, si baja se queda en BTC; útil para quien tiene ambos activos y no quiere decidir dirección
+- **Apalancamiento X2 vía préstamo colateralizado al 7.5% anual**: aprovechable solo si el rendimiento esperado del activo supera el costo del préstamo
+- **Regla del 50% del rebote previo para entrar long**: tras rebote del 20%, esperar retroceso del ~10% (50% del rebote) antes de entrar; timing importa — se invalida si el retroceso llega demasiado rápido
+- **Grid neutral en oro tokenizado (PaxG/USDT o SAU/USDT)**: rango $4,600-$5,400 con 55 grids y apalancamiento 10x-15x (no 20x por volatilidad del oro)
+- **Stop loss al lado opuesto del patrón de confirmación**: tras entrar con envolvente/penetrante/pin bar fuera del área de valor, el stop va del otro lado del patrón, no en soporte/resistencia arbitraria
+- **Recuperar long perdedor en futuros con cobertura short apalancado mayor**: abrir short de mayor apalancamiento (ej. long 5x + short 10x) para alcanzar break-even y cerrar ambas posiciones simultáneamente; alternativa al promediado unidireccional cuando la tendencia mayor sigue alcista
+- **Rotar capital de venta parcial ETH a compras spot BTC**: cuando se vendió 20% ETH en zona alta (~$3,780) y BTC retrocede a MM55 diaria, usar ese capital para promediar BTC en zona óptima en lugar de recomprar ETH
+- **Short de cobertura en ETH con apalancamiento bajo 2x**: protección de cartera BTC ante ruptura bajista esperada de triángulo/lateral, no para scalping; alternativa a short BTC cuando no se quiere ir contra tendencia mayor
+- **Entrada long fraccionada en altcoins tras retroceso al POC con stop bajo soporte**: esperar pullback al Point of Control, entrar con stop 5-10% bajo soporte, target 15-30%, mover stop a break-even tras +5-7% de ganancia
+- **Metodología top-down para acciones: índice → sectores fuertes → ADX → acciones con más fuerza**: identificar tendencia del S&P500, filtrar sectores líderes (utilities/salud/consumo básico/tecnología en contexto bajista macro), confirmar fuerza con ADX, buscar las acciones más fuertes dentro de esos sectores; entrada en retrocesos a MM azul/marrón + POC
+
+## Reglas de gestión de riesgo
+- Nunca vender 100% ni comprar 100%: mantener siempre 20% en BTC y 20% en USDT (matiz: reserva mínima 10-20%) (visto en 2 videos)
+- Apalancamiento máximo 3x-5x en long spot/perpetual altcoins; hasta 10x permitido en BTC y oro; short futuros 3x; evitar shorts apalancados en rangos con sesgo de rebote; crítica explícita a >10x y especialmente >20x o 125x sin experiencia; los breakouts de rango con 50x-100x los operan bots; en BitMEX/Bybit máximo 2 ops simultáneas usando como tamaño el capital real (no el 20x disponible) (en video 2025-04-13 cruce de la muerte usó BTC 10x y oro 20x con $2 simbólico, contradicción parcial); 2x-3x en BitMEX/Bitfinex/Kraken para shorts de altcoins en bajista (visto en 49 videos)
+- **División del capital**: 40% inversión mensual, 30% semanal, 20% diario, 10% futuros (10% dividido en 5-10 ops simultáneas); también dividir capital total en 15-20 partes con máximo 1 parte por trade; no comprometer >30% del capital en operaciones simultáneas; short swing dividible en 20 partes sin recompras dentro del tramo; dividir capital total en 10 tickets iguales (ej. $1,000 en 10 de $100) para scalping (visto en 4 videos)
+- **Calcular apalancamiento para soportar movimiento adverso hasta zona extrema sin liquidación** (ej. BTC short tolerando hasta $20K)
+- **Para principiantes**: NO apalancarse, ganar experiencia con capital pequeño antes de operar futuros; si principiante quiere probar, capital mínimo asumible (~$10) como pérdida total (visto en 3 videos)
+- **Ratio mínimo riesgo/recompensa 3:1** (ej. riesgo 7% vs ganancia 20%) o al menos 1:2; regla de aciertos 7/10 con stops 5-10% y targets 5-15% para salir rentable; take profit debe cubrir mínimo 3 stop loss consecutivos (visto en 14 videos)
+- No operar short contra la tendencia mayor (no shortear BTC en alcista semanal aunque 4H muestre fin de tramo); sí se puede shortear altcoins que diverjan (visto en 15 videos)
+- No entrar long si el precio ya está topando máximos del rango; no perseguir precio tras ruptura alcista agotada; cuando BTC llegue a $87K+ (zona bulltrap) NO comprar por FOMO; extrema avaricia confirma zona de salida; tampoco comprar spot a 108K tras rally desde 99K; no perseguir precios exactos (visto en 12 videos)
+- Órdenes de compra escalonadas para no concentrar entrada (visto en 7 videos)
+- Usar SIEMPRE stops en futuros; el cripto es manipulado; **stop loss obligatorio: NO cerrar manualmente antes de tocarlo** (matiz: oro permite operar sin stop con apalancamiento bajo; acciones con manipulación probable permitidas en futuros aislado sin stop como apuesta 70/30) (visto en 12 videos)
+- No promediar en contra ni duplicar posición tras perder stop (revancha emocional = destrucción de capital); duplicar SOLO con posición ya ganadora y stop a break-even del doble (visto en 6 videos)
+- Stop loss típico futuros BTC 4H: 1.5-2% del precio (≈10-20% con 5-10x), debajo de MM55 + POC; aplica a oro y criptos con capitalización suficiente; hasta 3% máximo calculando volatilidad del activo (visto en 12 videos)
+- Definir zona de venta defensiva previa (ej. 21.325 si se pierde 22.000) para no caer en bajista superior
+- El éxito depende de la gestión del capital, no de adivinar el mínimo ni la dirección
+- USDT/USDC solo como tránsito hacia BTC; custodiar BTC en billetera fría; USDC/USDT también para congelar capital fuera del mercado en zonas de venta esperada (visto en 2 videos)
+- **Dejar correr ganadores**: no cerrar al primer +%; mover stop a break-even positivo y permitir expansión hacia target (visto en 10 videos)
+- **No acumular shitcoins**: plan de venta parcial (50%) ante caída fuerte y recomprar en zonas de sangre
+- **No considerar Bull Run verdadero hasta ruptura con fuerza** de máximos previos
+- **En activos altamente especulativos (CRB, LINK histórico)**: solo con dinero que se pueda perder
+- **Reducir actividad en días de baja volatilidad esperada** (jueves/viernes santos, cierres de semana); también tramo 15 diciembre-fin de año: desmontar posiciones en lugar de abrir nuevas (visto en 4 videos)
+- **No operar rupturas en plena volatilidad**: esperar pullback a zonas conocidas (visto en 3 videos)
+- **No dejar operaciones abiertas overnight sin stop loss protector**: especialmente en cripto por volatilidad y manipulación nocturna en exchanges; tampoco dejar apalancadas el fin de semana: manipulación en CEX por bajo volumen (visto en 5 videos)
+- **Reducir/cubrir posiciones antes de mantenimientos programados de exchanges**: Bitfinex offline 2-3h históricamente genera movimientos bruscos al reabrir (visto en 3 videos)
+- **Diversificar capital en varias cuentas/exchanges**: no concentrar fondos en un solo venue por riesgo de manipulación/falla técnica
+- **Distribución de prioridades**: gestión de riesgo 30%, psicología 60%, estrategia 10% — el éxito viene de las dos primeras, no de la entrada perfecta
+- **Identificar perfil de trader propio antes de operar** (agresivo, intuitivo, analítico, metódico) para alinear estrategia con personalidad
+- **Plataformas según experiencia**: novatos en spot Binance/Bittrex sin apalancamiento; evitar BitMEX/Phemex/Kraken hasta tener experiencia
+- **Aceptar errores de gestión sin revancha**: no cerrar a tiempo un short ganador es error pero no genera pérdida; reconocer y seguir adelante sin forzar
+- **Nunca superar 10x de apalancamiento en BitMEX**: regla dura del autor, especialmente en recompras escalonadas sin stop
+- **Mantener precio de liquidación siempre por encima del siguiente nivel de recompra**: condición de supervivencia al operar sin stop en BitMEX
+- **Stop loss típico scalping altcoins: 10%**; tomar ganancias 12-15% aunque el target extendido sea 40%+
+- **Saber tomar ganancias es tan importante como saber entrar**: descargar 20-50% del capital en zona alta aunque el objetivo teórico sea mayor; no esperar al techo exacto (visto en 4 videos)
+- **Diversificar máximo 5-10% por activo en cartera de 3 meses**: nunca concentrar 100% en un solo cripto, repartir entre oro/plata/BTC/proyectos sólidos
+- **Stop loss generoso 4-5% en operativa de rango**: relación riesgo/beneficio 1:1 para no ser barrido por mechas dentro del lateral
+- **Préstamos colateralizados máximo 30% LTV** (no usar el 78% máximo que ofrece Binance): reinvertir el préstamo en el mismo activo para promediar entrada sin riesgo de liquidación rápida
+- **Diversificación 50/50 entre billetera fría y exchange centralizado**: mitad del capital en cold wallet para holdear, mitad operable en spot para trading activo
+- **No concentrar >30% de la riqueza digital en un solo exchange**: enviar BTC a billetera fría tras compra spot para reducir riesgo de venue
+- **Stop loss mínimo 20% en TRX semanal**: activos volátiles en timeframe alto requieren stops amplios para no ser barridos
+- **Ajustar tamaño de posición a la volatilidad del activo con mismo apalancamiento**: oro a 10x permite más capital que BTC a 10x porque el stop natural es más estrecho; +15% en oro y -15% en BTC (ambas 10x) deja ganancia neta por diferencia de exposición absoluta
+- **Toma de ganancias escalonada por temporalidad**: futuros = tomar ganancias activamente; spot diario = vender al aparecer señales; spot semanal = vender solo con patrón de salida confirmado; spot mensual = no vender (holding herencia largo plazo)
+- **Evitar tokens apalancados 3x de exchanges**: tracking pobre por rebalanceo diario y comisiones altas frente a futuros directos — preferir futuros para exposición apalancada
+- **No colocar stop loss en zonas técnicas evidentes** (justo debajo de soporte clave o ruptura obvia): son imán de liquidaciones para bots/exchanges en cripto; usar stop mental/soft stop o alejarlo un rango adicional para evitar stop-hunting
+- **Cerrar grids activos cuando la volatilidad se comprime al extremo**: si el rango se estrecha mucho antes de ruptura esperada, cerrar el grid y esperar nueva zona de reentrada en vez de dejarlo expuesto a la explosión direccional
+
+## Psicología / Reglas mentales
+- Holders deben ignorar volatilidad de corto plazo (visto en 2 videos)
+- Distinguir rebote técnico (bull trap) de cambio real de tendencia
+- Confianza en el dólar como referencia frente a mercado tradicional
+- Aceptar el stop como coste del negocio; la revancha emocional (reentrar, doblar) destruye cuentas (visto en 8 videos)
+- **Antes de entrar, preguntarse "qué pasa si salta el stop loss" y aceptar el riesgo explícitamente**; si no se acepta, no operar
+- Esperar el patrón de "te joden" (barrido de liquidez) antes de entradas alcistas importantes en semanal/diario (visto en 5 videos)
+- Consciencia de manipulación: wash trading, spoofing, front-running, pump & dump, bots de exchanges replicando patrones casi calcados en altcoins, velas anómalas en exchanges (Kraken 7,989-12,019; BitFinex/Binance vela $19; Bitfinex derivados $15K) que liquidan cuentas en ambas direcciones simultáneamente; en extrema avaricia las ballenas barren minoristas sobreapalancados (visto en 8 videos)
+- **No operar bajo depresión, estrés o ansiedad**: si el estado emocional está comprometido, quedarse fuera
+- BTC no es refugio de valor: es especulativo y manipulado, caería junto con índices en crisis (matiz: en otro video se menciona BTC junto a oro como "activo seguro") (visto en 4 videos)
+- Paciencia y gestión de capital por encima de la especulación direccional y del FOMO; zonas de euforia proyectadas son para salir, no para entrar; no perseguir precios exactos, respetar la zona; **"comprar cuando la gente vende, vender cuando hay euforia"**; no predecir techos/suelos; en alta volatilidad no inventar entradas — esperar setup claro (visto en 48 videos)
+- Ignorar narrativas macro/noticias (aranceles Trump-China, geopolítica, guerras suspendidas, lanzamiento de Bakkt) y operar solo el gráfico; el ruido se revierte en días sin impacto técnico real; tensión en estrecho de Ormuz no justifica long en petróleo si el técnico no lo valida (visto en 22 videos)
+- **No pedir consejos de inversión en el chat**: cada trader debe tener su propio plan; la operativa propia no es señal replicable sin contexto personal; no pagar membresías vitalicias a estafadores que usan el nombre del autor (visto en 5 videos)
+- **Disciplina sobre sentimiento**: operar solo cuando el patrón dé entrada (visto en 25 videos)
+- **Crítico con selección de altcoins por IA genérica**: rechaza sugerencias automáticas de ChatGPT sin análisis técnico propio
+- **Aprender la estrategia y aplicarla en mercados líquidos** (acciones, oro) por menor manipulación que cripto
+- **Distinguir distribución de ballenas vs demanda minorista**: ballenas vendiendo en zona alta del rango mientras retail compra anticipa caída; leer flujo institucional vs minorista antes de entrar; ballenas observan desde fuera esperando definir dirección; cuando salen del mercado preparan barrida para reacumular abajo (visto en 9 videos)
+- **Reconocer y asumir errores propios**: cuando se opera contra tendencia mayor (ej. short en alcista) aceptar el error y reajustar sin defender la posición
+- **USDT como emisión artificial infla precios**: demanda no orgánica de Tether distorsiona rallies, leerlo como riesgo de corrección posterior
+- **Operar solo patrones que se conocen**: no improvisar con setups desconocidos aunque parezcan oportunidades; respetar el círculo de competencia
+- **No seguir a las masas**: cuando la mayoría ve ruptura bajista clara (ej. BTC a $3,200) suele ser trampa; analizar fuerza real del movimiento, no narrativa; BitMEX con exceso de longs abiertos = señal contraria, precio buscará liquidar (visto en 7 videos)
+- **No cerrar longs por pánico al ver números rojos**: respetar la estrategia original e ignorar el color rojo como alarma emocional cuando el plan sigue vigente (visto en 6 videos)
+- **Operar contra el consenso técnico evidente**: cuando todas las masas ven señal bajista clara por indicadores, suele haber impulso alcista previo por psicología de masas antes del movimiento real
+- **El 60% del trading es psicológico**: regla numérica explícita del autor — no confiar solo en el análisis técnico, la mente decide más que el indicador
+- **Felicitación navideña / vida fuera del trading**: buscar paz interior, no depender emocionalmente de otros, compartir tiempo en familia — el trader debe tener vida más allá del gráfico (visto en 4 videos)
+- **No participar en eventos simbólicos que requieran retirar fondos de exchanges** (ej. Proof of Keys 3 ene) si se necesita operar: decisión personal de prioridad operativa sobre narrativa
+- **Visión dual corto/largo plazo coherente**: bajista a corto (próximas semanas) puede convivir con alcista estructural a largo (escasez 21M BTC, ciclo 2021) — no confundir timeframes en la tesis
+- **El trading es 90% emocional y 10% análisis técnico**: variante numérica del autor (vs. 60% psicología citado en otros videos) — la mente pesa más que el indicador
+- **Filosofía "no perder" estilo Warren Buffett**: estrategia escrita enfocada en preservar capital, no en maximizar ganancia; regla 1 no perder, regla 2 no olvidar la regla 1
+- **Mantenimientos simultáneos de exchanges durante caídas bruscas**: Binance anunció mantenimiento de 8h justo el 14-nov-2018 cuando BTC cayó 10%; sospecha de manipulación coordinada
+- **"No perder" antes que ganar como mantra operativo**: filosofía Buffett aplicada al scalping; priorizar supervivencia del capital sobre maximizar retorno por operación
+- **Estar fuera del mercado es una posición válida**: cuando no hay confluencia clara de indicadores, no operar es la decisión correcta — especialmente en lateralizaciones de baja volatilidad (visto en 8 videos)
+- **Holders deben ignorar caídas a $3K-$4K por catalizadores institucionales (Bakkt)**: mantener horizonte largo plazo $50K+ sin vender en pánico
+- **El análisis técnico sí permite predecir el precio con probabilidad**: refutar la narrativa de que el mercado es aleatorio; patrones + indicadores + gestión dan edge real
+- **No ahorrar en dólares ante divergencia bajista del S&P500**: rotar a oro, plata, BTC y proyectos cripto sólidos como refugio de 3 meses
+- **"Urgencia = pérdida"**: nunca operar por urgencia de dinero; la presión financiera fuerza entradas malas y destruye capital — si necesitas el dinero ya, no operes
+- **Desconfiar de intermediarios financieros (bancos, ETFs, fondos)**: caso BlackRock limitando retiros de fondo de crédito privado de 2 billones refuerza tesis de auto-custodia (BTC en frío + dólares físicos) sobre exposición vía intermediarios
+- **Distinguir "tejoden" (debilidad/ruptura falsa) vs "zona de duda" (fuerza)**: ambos generan lateral pero el primero anticipa rechazo y el segundo continuación — leer ADX y monitor para diferenciar antes de operar la ruptura (visto en 3 videos)
+- **Generar ingresos pasivos durante laterales en lugar de forzar trades direccionales**: usar pools y grids cuando no hay setup claro convierte la espera en rendimiento, no en frustración (visto en 4 videos)
+- **Anotar decisiones impulsivas en bitácora**: registrar tentaciones de desviarse del plan ayuda a no repetirlas; la disciplina se construye revisando los errores propios
+- **Insiders descuentan eventos macro con meses de anticipación**: venta en máximos de $120K+ en octubre anticipó caída de feb/mar; el retail ve la noticia cuando ya se descontó
+- **Operar la fuerza de la tendencia, no los soportes/resistencias tradicionales**: la acción del precio y la fuerza del movimiento pesan más que niveles técnicos clásicos; si el movimiento tiene fuerza, ignorar cruces bajistas MACD y similares
+- **Tras 5-7 operaciones ganadoras viene una perdedora por estadística**: aceptarlo como coste del negocio evita revancha emocional y cierres prematuros; no existe estrategia perfecta, la gestión del trade malo pesa más que la búsqueda del setup perfecto
+- **El mercado está diseñado para que el retail pierda**: asumirlo como premisa operativa antes de entrar, no como queja; la ventaja viene de gestión y psicología, no de adivinar dirección
+- **Mantenimiento programado de Binance como patrón bajista recurrente**: observado 5 veces coincidiendo con caídas fuertes de BTC (depósitos/retiros suspendidos); factor manipulativo predecible a considerar en calendario operativo
+- **No usar capital necesario para vivir**: nunca operar con dinero que se necesita para gastos esenciales; la presión financiera fuerza decisiones malas y amplifica el daño emocional de un stop
+- **Ningún trader acierta el punto exacto de entrada o salida**: aceptar que la estrategia funciona 7-8 de 10 y respetar el stop; buscar la precisión perfecta es una trampa psicológica
+- **Mismo precio, sentimiento opuesto según el ciclo**: BTC en una zona genera euforia en fase alcista y pánico tras caída desde máximos, pese a ser el mismo nivel absoluto. Leer el sentimiento contrario como señal contraria, no como confirmación.
+- **Oro subiendo a máximos históricos como señal de alerta macro**: cuando grandes capitales rotan al oro, anticipar posible caída del mercado regulado y preparar capital para compras bajas en BTC, no perseguir rally cripto
+
+## Tickers / Activos que analiza frecuentemente
+- **BTC**: activo principal. Niveles evolucionados: zona no-compra >27K (2023) → >40K (2024-04-13) → $67-68K "tejoden" doble techo diario (2025-04-13) → $72,495 short proyectado (2025-04-13) → long 10x $78,708 (+22%) target $83-84K, precaución >$87K → long 4H pauta plana ABC con compras $75-77K, resistencia $86K (2025-05-13) → $107,325 lateral 4H 106,700-108,300 (grid 110,100), venta spot 107-108K, target semanal 147K (2025-07-13) → $112,200 lateral diario/4H, ruptura alcista necesitaría $117K (2025-10-13) → $74.9K rechazo $75.4-$75.5K, máximo previo $76K (2026-04-16) → **$66,544 corrigiendo desde $69K, lateral diario $60-70K, lateral 4H $65-68K, POC $66,446 zona vacía, bajista 1H/4H pendiente positiva, objetivo bajista $64-65K, proyección extrema 2026 a $47K (2026-04-04)**. Soporte MM55 4H ~$72K; bulltrap proyectado $85-110K; máximo semanal previo $126K. **Histórico sept 2019**: lateral 10,000-10,300, gap CME pendiente $8,200 (imán bajista), target rebote 8,500-9,000-10,600-11,300, escenarios extremos $6,000/$3,000; mecha manipulada Kraken 7,989-12,019 USD; Bakkt salió sin impacto alcista. **Histórico antiguo**: 22K/29K, 28-24K/21K/15.5K/9K; compra 19.650 venta 30.400; post-halving ~100K dic 2024; crash marzo 2020 a 3.800; histórico marzo 2019: lateral $3,900-$4,000, resistencia $4,100-$4,200, short desde $3,885-$3,900 target $3,650-$3,710, soporte clave $3,500-$3,600; feb 2019: rango $3,310-$3,950, soportes $3,200/$3,000, target $4,100-$4,500; ene 2019: rango $3,500-$3,700, target bajista $3,200-$3,140, compra agresiva 100% capital en $3,100; dic 2018: rango $3,500-$4,200, doble techo $4,200, target bajista $3,500-$3,100, scalping short 10x desde $3,320; abr 2022: zona compra 57-59K tras barrido stops, perder 57K = cambio tendencia; 2026-04-02: zona te joden $69K en 1H buscar shorts tras vela verde; 2026-03-13: ruptura del lateral $63-70K hasta $74K; nuevo rango proyectado $69K-$74.2K, target $80-90K fin marzo; 2026-03-13 lateral $60-70K, target $70-73K esta semana o caída a $50K; rebote desde $60K a $70,700 feb 2026 interpretado como acumulación institucional, no inicio alcista confirmado; 2026-04-08 lateral 4H 67-69K, soporte $67,300, objetivo semanal $120K; 2026-04-01 rebote 1H hasta $69K desde $67,845, mínimo reciente $65,631; 2026-01-13 lateral $86-89.4K, long 1H target $88,200, proyección corrección 2026 a $43K; 2025-08-13 sobre MM55 diaria $113,733, zona compra spot, invalidación $112K; histórico jun 2019: corrección esperada 7,500-8,700 tras rally desde 3,200, zona compra; Histórico may 2019 short desde $6,000 3x esperando corrección a $6,250-$7,300 pauta plana; Oct 2019 rebote proyectado $8,500-$8,700 antes de posible caída a $6,000; gap superior $11,700 (visto en 85 videos)
+- **ETH**: mejores rendimientos % que BTC en subidas; histórico rally 600→4.500; acumular en correcciones aunque caiga más; compra previa $1,530 alcista en 4H; entrada spot personal $2,442; alcista semanal/diario, NO shortear en 4H pese a patrón bajista corto; en 2025-07-13 rechazó como sugerencia genérica de ChatGPT; en 2026-04-04 sigue con espacio para caer, podría perder $2,000 si BTC va a $47K, escenario extremo $1,000-$1,300; **histórico sept 2019**: compras $166-180-200 con target $195-225, mismo patrón fractal que LTC/EOS; histórico marzo 2019: short con resistencia $140, target bajista $110-$115, debajo de MM20; dic 2018: short ETH desde canal descendente, target ~$84, recompras escalonadas; abr 2022 llegando a zona compra con mismo patrón rebote que BTC; compra adicional $2,640, pool liquidez rango $2,500-$3,536, nivel de respiro $2,500; histórico jun 2019: entrada escalonada 179/150/100 USD, target rebote 190, target LP 400; Histórico nov 2019 compra $148 target $190 con stop loss progresivo; Feb 2020 patrón alcista mejor definido que BTC, resistencia $283, no afectado por caída (visto en 34 videos)
+- **BNB**: proyección alcista en diario; divergencia bajista en 1H señala cierre de longs y posible caída a MM55 $615; bot Satoshi lo lleva en long; **histórico**: vendido $30, recomprado $22 (hold sin apalancamiento), bajista corto plazo sept 2019; vendido 50% en $30/$38, recompra parcial $27-$29 (jul-ago 2019); compra previa $24, ventas parciales $25.50 y $27 (2020); zona compra $500-$600 preferida sobre CRO como token de exchange (visto en 15 videos)
+- **MATIC / POL**: rebrand MATIC→POL. Antes "rompió zona clave, ya no es compra"; en 2025-07-13 zona compra semanal $0.17 LP, segunda compra $0.11, objetivo $0.20-0.21 entre 8-10 julio; movimiento alcista esperado dentro de lateral sept 2019 (contradicción temporal entre videos); abr 2022 acumulación, mantener y comprar más si baja (visto en 6 videos)
+- **ROSE**: zona de compra en semanal, requiere paciencia (caso previo tardó ~9 meses); entrada previa $0.06, venta previa $0.60, buen proyecto a 1 año (visto en 2 videos)
+- **STRONG, TRUMP token**: proyecciones alcistas mencionadas
+- **LUNA**: ejemplo de proyecto fallido y caso histórico de front-running antes del colapso (visto en 2 videos)
+- **LBA token**: ejemplo didáctico de "token basura"
+- **XRP**: no acumular en zona actual; mejores compras <0.30, ideal <0.25 USD; aguantó bear 2018-19; sólido para semanal; dio ganancias con grid pero ya no es zona; objetivo fin de 2026 ~$2.58-$2.60; rechaza proyección catastrófica a $0.45; semanal tocando "punto cero", esperar par de semanas; short en paper trading vía orden limit; en 2025-07-13 rechazó como sugerencia genérica ChatGPT; **histórico sept 2019**: compras $0.25-0.26 con target $0.28-0.32, alcista corto plazo; ene 2019: long mantenido en pérdida -7.33% por convicción de rebote tras barrida de liquidaciones; dic 2018: XRP desacoplado alcista de BTC bajista, long aprovechando correlación inversa (visto en 43 videos)
+- **DOGE**: short en paper trading vía orden limit (testeo especulativo, no capital real)
+- **PENDLE**: alcista en diario; esperar long en retroceso a MM55 en 1H/15min por parte baja; NO shortear con stop 2%
+- **LTC, ETC (Ethereum Classic), DASH, ZEC, ADA**: aguantaron el bear 2018-19. **LTC**: zona compra diario, mejor entrada $4 (futuros); comprar solo <$100; histórico sept 2019 compras $57-75 con target $80, también short hacia $60-63. **ADA**: en semanal proyección bajista $0.72 desde $0.80, fase acumulación/distribución; en 2025-07-13 rechazó como ChatGPT; histórico sept 2019: ADA/BTC único long válido (stop 13%, target 36%), compras $0.071 con target $0.90-$0.96 vs USD. **DASH**: target $100, retroceso a MM marrón antes de entrada, soporte $90-93. **ETC (token, no Classic genérico)**: compra $5.80-$5.85 stop 5% target $6.36 (10%); ETC/BTC target 636 satoshis; histórico marzo 2019: suelo redondeado en semanal, proyección alcista ~150% en 3-6 meses; histórico marzo 2019: LTC short desde $142, luego entrada $134-136 cierre BE en $95; ETC señal grupo +2.57% a +3.82%; LTC ene 2019: long cerrado +85 USD, reentrada en retroceso a 0.0088 BTC; abr 2022 LTC acumular poco para diversificar; ADA vendida sobre $2.50; feb 2026 zona $55 para semanal con potencial x2; histórico jun 2019: venta $115-118 desde $100, recompra $105-112, corrección 160-170; histórico jun 2019: ETC corto con +500 USD de ganancia tras ruptura bajista (visto en 25 videos)
+- **Kaspa**: rechazado como sugerencia genérica ChatGPT en 2025-07-13, sin análisis propio
+- **ICP, NEO**: pueden subir pero con mayor riesgo que BTC; NEO holding personal, alcista en diario, "seguro" difícil de perder; en otro video NEO semanal lateralizado, no abrir corto; **histórico sept 2019**: compras NEO $7.21 / $8 (zona atractiva), monitor con fuerza bajista aún; histórico marzo 2019: divergencia alcista ya consumida 50-60%, sin soporte claro, autor no cree en proyecto (visto en 13 videos)
+- **YFI**: sector DeFi, alto riesgo
+- **DOT (Polkadot)**: mismo patrón que BTC, soporte 6.20 con probabilidad alta de romperlo; holding personal; en 4H abril 2026 sin entrada, esperar; cambio real de tendencia requeriría $8-10; zona compra semanal target $13-15 (tejoden) y máximo histórico $50; en 2025-07-13 alcista en diario y 4H target ~380 (contradicción temporal); en diario bajista, no entrar pegado a MM55; solo compra semanal con paciencia para 2-3x (visto en 6 videos)
+- **HBAR**: entre longs cerrados tras agotamiento alcista corto; bajista en diario, no operable en 4H; en 2025-07-13 flecha alcista en semanal previa (visto en 3 videos)
+- **LCO**: holding personal mencionado
+- **MKR (MakerDAO), LIT**: mencionados de pasada, no recomienda operar con grid; en sept 2019 MKR proyecto en quiebra (no podía pagar empleados)
+- **BCH (Bitcoin Cash)**: prohibido operarlo (experiencia negativa personal en 2017); en sept 2019 esperar ruptura del POC para entrada alcista (contradicción temporal con prohibición posterior); esperar retroceso a MM55 marrón para entrada long (jul 2019) (visto en 11 videos)
+- **BSV, PPT**: mencionados sin setup operable
+- **SOLANA (SOL)**: lateral en 4H, no bajista; spot tranquilo, futuros operar como rango; alcista en semanal/diario/4H pero stop natural 9.38% — descartar; aún recorrido bajista, esperar zona liquidez; proyección 200-220 antes de septiembre y posible 300 a finales noviembre 2025; en 2026-04-04 divergencia en sistema, buscar long en 1H tras barrido en ~$76; abr 2022 rebote alcista posible desde zona actual, no acumular; 2026-04-02: mantener short abierto; mejor candidato short por mismo patrón que BTC; corrección sana en $86, rebote proyectado $130-$140 (visto en 14 videos)
+- **TRON / TRX**: análisis diario/semanal; largo sin cambios (2026-04-04); en otro video TON marcado como no operable; **histórico sept 2019**: diario alcista, target $190-195 con stop 8% bajo POC; en otros videos en rango no operable (visto en 21 videos)
+- **RAVE**: alcista diario y 1H desde $3.83, target $15-$16, próximo movimiento sería el último
+- **AKT**: divergencia bajista con pendiente aún positiva; no meter short, solo scalping en minutos a favor
+- **MONAD**: solo scalping 1-5 min, alcista en todas las temporalidades menores
+- **RUNE**: alcista pero con mayor riesgo, potencial explosivo; zona compra semanal; feb 2026 bajista semanal/diaria, solo rebote técnico hacia $127, evitar entrada (visto en 3 videos)
+- **KAVA**: no operable, sin setup claro
+- **FIL (Filecoin)**: rebote alcista en 4H y 1H (target 1H ~$252), sigue bajista en diario; abr 2022 entrada con plazo 4-6 semanas en zona actual
+- **TETA / THETA**: zona compra semanal/diario, alcista en 4H ~$0.67/token (2025-05-13); pero en 2025-04-13 trampa lateral "topado a la media, patrón bajista" (contradicción); abr 2022 muy desarrollado, mantener si se tiene pero no comprar nuevo (visto en 2 videos)
+- **RAY**: zona compra en semanal
+- **ATOM**: bajista/lateral, no entrar long; **ATOM/COS**: entrada alcista intradía sept 2019 (contradicción temporal); abr 2022 alcista pero no comprar en zona actual, esperar caída (visto en 2 videos)
+- **NEAR/NIR**: mismo patrón que DOT; en otro video setup alcista en 4H entrando en zona inferior (visto en 2 videos)
+- **AERGO/RUNY**: alcista, subió ~30-40% desde señal previa; no shortear
+- **BUSD/USDT/USDC**: no recomienda cambiar una stablecoin por otra; prefiere USDT por trayectoria pese a desconfianza, aunque USDC tiene mejor paridad; USDT como tránsito; USDC también usado para congelar capital fuera del mercado (visto en 4 videos)
+- **USDT/ARS**: semanal proyecta ruptura alcista, no da cifra exacta
+- **DUSK**: bajista en 4H pero lateral diario; proyección alcista con stop 4-5%
+- **GFI (Goldfinch)**: tendencia bajista fuerte; zona compra mensual proyectada hacia febrero 2026
+- **FET**: sesgo alcista con stop 5%, apalancamiento máximo 3x (15% riesgo total), no recomendado
+- **CAKE**: spot diario, alcista 4H (2025-05-13); en 2025-04-13 trampa lateral; en 2025-07-13 sin entrada clara; abr 2022 comprar bajo $20 para staking (visto en 3 videos)
+- **LINK**: proyección alcista con entrada en zona "la mejor"; **histórico sept 2019**: compra $71, setup alcista con potencial 26%; en otros videos señales contradictorias mejor no operar; oportunidad 2.38 USD rebote jul 2019, ruptura alcista con volumen requiere calcular stop; 2020 rebote a media para seguir cayendo, no comprar en diario abr 2022 (visto en 16 videos)
+- **AVAX**: patrón definido para cerrar longs; en 2025-07-13 alcista diario y 4H target MM ~20 (contradicción temporal); abr 2022 ya desarrollado, no es buena opción ahora (visto en 2 videos)
+- **WLD (Worldcoin)**: bajista diario y 4H (2026-04-16); en 2025-04-13 "dejado al alza el día anterior" (contradicción) (visto en 3 videos)
+- **XMR (Monero)**: probabilidad alta de caer/lateralizar, no subirá próximos 10 días; **histórico sept 2019**: entrada alcista con target $80-$86; en otro video patrón adelantado bajista hacia $65 (contradicción temporal); 2020 patrón distinto alcista, rebote sobre POC en ~$93 puede continuar (visto en 11 videos)
+- **OP (Optimism)**: bajista diario y semanal, muy débil
+- **CRB (Civic)**: en 0.50, zona compra mensual solo con dinero que se pueda perder
+- **ONDO**: mencionado solo por protesta de escritura incorrecta
+- **ALGO** (NUEVO): comprado $0.19 para largo plazo (sept 2019), acumulación spot
+- **MANA** (NUEVO): entrada alcista clara sept 2019; en otros videos sin entrada clara; histórico marzo 2019: favorita para tomar ganancias, esperar corrección a línea de tendencia antes de entrar
+- **OAX** (NUEVO): setup alcista interesante con divergencia alcista (sept 2019)
+- **DGTX** (NUEVO): alcista, target $0.055 (sept 2019)
+- **NANO/USDT** (NUEVO): divergencia alcista, posible long con riesgo/recompensa 22%/9% (sept 2019); histórico marzo 2019: operada con +9% ganancia, esperar MACD bajo línea cero para reentrada; Compra spot $1 nov 2019 horizonte 6-12 meses tras listado en Kraken (visto en 4 videos)
+- **NEXO/BTC** (NUEVO): solo TP en 2,900 satoshis, sin stop por manipulación (visto en 3 videos)
+- **XLM** (NUEVO): comprado spot $0.057-0.059 (hold sin apalancamiento sept 2019); en 2025 sugiere tomar ganancias tras subir mucho; histórico marzo 2019: opera frecuentemente XLM, esperar retroceso desde resistencia 4H; abr 2022 alcista, comprar máximo 10% de cartera; histórico jun 2019: ruptura alcista confirmada +5%, target máximo histórico $0.35 (visto en 10 videos)
+- **ZRX** (NUEVO): sin entrada clara, esperar zona soporte; ya pasó la entrada y viene corrección bajista; histórico marzo 2019: long desde 22-23 marzo basado en suelo redondeado + divergencia alcista 4H, +8% a +18%; jun 2019: en zona de decisión, vender si se tiene, no entrar ahora (visto en 5 videos)
+- **WAN** (NUEVO): bajista, evitar, no comprar
+- **QTUM** (NUEVO): compra histórica $59 sept 2019; dio buenas ganancias en short (visto en 8 videos)
+- **IOTA** (NUEVO): aún tiene fuerza alcista, no entrar short todavía; movimiento bajista finalizado, alcista hacia $0.27-0.30 (sept 2019); en otros videos sin entrada clara; histórico marzo 2019: vigilar entrada long con confluencia ADX+MACD+línea de tendencia, ganancia previa 6.77% (visto en 5 videos)
+- **EOS** (NUEVO en tickers): histórico sept 2019: comprado $180 vendido $205 (subió hasta $217), short tras cumplir; soporte $3.75 antes de continuación alcista; patrón bajista de continuación; se puede operar a la baja; histórico marzo 2019: precio incongruente sobrevalorado, posible triángulo con ruptura bajista; histórico jun 2019: long $5-6.23 target $8.50-9 CP y $11 LP; recompra onda 4 ~$6.70
+- **Total Altcoins**: continuación bajista confirmada (sept 2019)
+- **SP500, Nasdaq, Dow Jones, US30**: SP500 short 5x semanal desde ~3.970; Nasdaq tras susto ya no operable; caerían junto a BTC en crisis; Dow Jones (abril 2026) cerrar longs esperando corrección; alcistas en 2025-07-13 con guerra geopolítica suspendida (visto en 10 videos)
+- **Oro (XAU)**: cayendo previamente; llegó a zona compra ~1.900, long en apertura de lunes con confirmación 4H/1H; alcista continuado en ganancias; posible refugio en crisis; operable sin SL con apalancamiento bajo; en 2025-04-13 cruce de la muerte ejecutó long 20x con capital simbólico; en 2025-07-13 long con 5% en contra se mantiene alcista en 4H; en 2026-04-04 short parcial llegó a $4,576 (objetivo $4,500), se gira bajista martes pero 1H ya alcista — cancelar short; **histórico sept 2019**: zona compra $1,478-$1,490 con stop 2%, target $1,540-$1,556, bajista LP $1,420; divergencia bajista en $1,556 anticipó caída; alcista CP / bajista LP coexisten; 2026-04-02: salir de largos, proyección bajista hacia $4,500; zona compra $4,600-$4,650; retroceso a $4,900-$4,950 esperable; no llegaría a $4,700 (visto en 24 videos)
+- **Plata**: formando doble suelo, oportunidad compra diario; alcista en 4H y 1H, esperar retroceso; operable cuando dé patrón; en 2026-04-04 short exitoso cayó 8.13% hasta $69.47 — cerrar; 2026-04-02: salir, zona de caída hacia $69; entrada long $73-$74 en apertura; vela roja fuerte interpretada como barrido antes de continuar alcista (visto en 13 videos)
+- **Cobre**: patrón bajista semanal similar a índices
+- **Petróleo/Crudo**: bajista en semanal, rango por debajo de la media; referencia histórica crash 2020 (-43 USD); operable cuando dé patrón; no entrar long pese a noticias del estrecho de Ormuz; tomar ganancias cerca de $64 tras entrada $57-$58 (visto en 6 videos)
+- **AAPL**: rebote esperado zona 180 en 4H, mejor compra 165
+- **TSLA**: posible trade cerca de 200; spot con promedio a la baja, cerca de stop $15.43 (visto en 3 videos)
+- **Ford**: bajista, seguirá cayendo por dinámica estructural del sector
+- **HCA (Hospital Corp)**: posición personal "plan C", comprada en 248-256
+- **MSTR**: acumular desde precio actual, proyección alcista hasta 2028 (visto en 4 videos)
+- **Intel (INTC)**: alcista en semanal, sesgo largo
+- **PLSRB (petrolera)**: semanal lateral/caída, diario alcista con manipulación; futuros aislado sin stop al alza (probabilidad 70/30)
+- **GXS**: señal previa con potencial 42%, stop sacó la operación antes del impulso (jul 2019, entrada 1478 satoshis)
+- **BTT**: tentativo, esperar desarrollo de MACD antes de entrar
+- **CDT**: esperar señal de venta cuando se forme patrón bajista
+- **DGB/DGT**: bajista, sin entrada
+- **ONT (Ontology)**: mismo patrón que BTC, alcista pero cuidado con retrocesos nocturnos; histórico marzo 2019: en resistencia, esperar retroceso a línea de tendencia para entrada long
+- **WTC**: viene de subir, esperar pendiente positiva en diario; soporte ~1,000 sat
+- **POPULUS, STEEM, ELF, IOST, BNT, HOOP**: mencionados sin setup operable claro
+- **PIVX, BSV/PSV**: sin información suficiente; "o sube o desaparece"
+- **LEO (Bitfinex)**: ~$1.27, posible caso similar a BNB como token de exchange
+- **TWO (token)**: suelo redondeado, entrada alcista stop -6.40% target +11.16% (ratio 1:2)
+- **PILAR (PLR)**: entrada alcista clara (+112% proyección) pese a manipulación; esperar retroceso antes de entrar, no comprar en máximo parabólico (sept 2019)
+- **NPXS**: compra 6-8 satoshis / venta 9-11 satoshis (sept 2019)
+- **MITH**: zona de compra con stop ~7% (sept 2019)
+- **ONE/Harmony**: alcista en semanal/mensual, posible rango antes de subir; perdiendo fuerza en otro análisis
+- **DIVI**: trade especulativo con capital pequeño, stop 8.14% target 41% (sept 2019)
+- **HOT**: rebote en soporte, riesgo bajo, target 16-40%; contra USD buena entrada (sept 2019)
+- **CDT**: setup alcista con cruce de medias y ADX positivo, stop 8% target 55% (sept 2019)
+- **PAX**: triángulo posible ruptura alcista, ratio 22% con stop 6% (sept 2019)
+- **JCT**: rango, esperar parte baja para entrar (sept 2019)
+- **CND**: pauta plana de continuación (sept 2019)
+- **2COIN**: operador grande sosteniendo precio, posible setup alcista vigilar (sept 2019)
+- **XTZ (Tezos)**: posible pauta plana, esperar onda C (sept 2019)
+- **OMG**: rango bajista, entrar solo abajo del rango (sept 2019)
+- **USDT (Tether)**: emisión artificial de stablecoin inflando precios, riesgo de demanda no orgánica; Bitfinex quemó >50% suministro oct 2018; cayó a $0.96-0.97 usable para congelar capital con descuento (visto en 2 videos)
+- **Libra (Facebook Coin)**: amenaza específica para Ripple/XRP por superposición de caso de uso, no para BTC (visto en 2 videos)
+- **DASH** (refactor histórico): marzo 2019 long abierto basado en divergencia alcista y ruptura esperada de Fibonacci 0.23
+- **TRX (Tron)** (histórico marzo 2019): long con divergencia alcista y soporte cercano, stop 5%; ene 2019: short cerrado sin pérdida tras paciencia (entrada 1,550 / salida 3,528 sat) (visto en 2 videos)
+- **ZEC (Zcash)** (histórico marzo 2019): long exitoso desde $135.20, rendimiento máximo 14.60-15.24%
+- **VIA/BTC** (histórico marzo 2019): señal long en 923 satoshis, rendimiento +160% en 10 días
+- **XVG (Verge)** (histórico marzo 2019): short abierto con apalancamiento 10x junto a BTC, en ganancias
+- **ETN (Electroneum)**: long solo tras confirmación cruce alcista MM + MACD positivo + ADX con fuerza, stop 6% target 20-21%
+- **KEY (SelfKey)**: solo apta para scalping con Bandas de Bollinger respetando soporte horizontal, stop -3%, no intradía
+- **NEM (XEM)**: pauta plana ya tocó suelo, proyección alcista en diario y 4H, stop ~6.87%
+- **WAVES**: sobrevalorada con divergencia bajista en diario, NO comprar, mejor vender (visto en 2 videos)
+- **MDA**: moneda con mucha fuerza operada frecuentemente, esperar retroceso a soporte para entrada long
+- **HOT (Holo)**: long en soporte 4H con vela alcista + MACD con fuerza, stop ~8.33% bajo soporte
+- **FUN (FunFair)**: no operable intradía, requiere holdear demasiado tiempo, sin tendencia definida
+- **SC (Siacoin)** (histórico marzo 2019): operación long con +15% ganancia en curso
+- **EOS** (feb 2019): long cerrado +59% (~0.0266 BTC / ~$1,028) tras ruptura de presión de oferta confirmada por ADX
+- **LSK (Lisk)** (feb 2019): short cerrado con +189 USD tras divergencia bajista, entrada en 0.0050-0.0053 BTC
+- **TRUMP token** (feb 2019): long abierto en ganancia junto a BTC/ETH/XRP/TRX
+- **ICX (Icon)**: mencionado sin intención de short, sin setup operable
+- **NCoin**: short abierto ene 2019 junto a BTC/LTC/TRX en fase bajista del mercado
+- **LRC (Loopring)**: comprado 1,991 sat / vendido 2,447 sat (ene 2019, operación spot rotando capital mientras BTC lateral)
+- **DOC, YOYO**: altcoins operadas en Binance con rendimientos del 5-15% (ene 2019)
+- **Shitcoin no especificada** (ene 2019): subió ~6000%, advertencia explícita de NO entrar en pumps ya consumados
+- **BTC histórico nov 2018**: doble suelo ~$3,700-3,800 interpretado como bulltrap; rango $4,000-$4,450 tras rebote; caída ~10.6% en 24h atravesando $6,100; long recomprado desde $6,350 promediado $5,658 target $8,500 dic 2018; target alcista $5,900 tras convergencia MACD 1H; resistencia histórica $6,600 alcanzada $6,604 validando proyección previa; oct 2018 lateral 6,450-6,600, soporte 6,125-6,200, long escalonado 6,125/6,000/5,900/5,700; rebote $6,300 SMA20 a banda superior $6,450-6,500
+- **BCH hard fork 15-nov-2018**: subida previa por fundamental pero caída esperada post-evento; autor recomienda NO operar durante el fork
+- **TRX histórico nov 2018**: long abierto ~129 sat con plan de recompra 130-135, sin preocupación pese a -0.38%
+- **EOS histórico nov 2018**: scalping short intradía exitoso junto a LTC/BCH en patrón bajista correlacionado
+- **GUSD (Gemini Dollar) / TUSD (TrueUSD)**: ~$1.02 oct 2018, más seguras que USDT por auditorías pero igualmente no perfectamente estables
+- **RDN**: entrada en ruptura oct 2018 con +6.11% de ganancia (ejemplo didáctico del taller)
+- **PHX**: ruptura alcista oct 2018 con 40% de ganancia total; autor salió con 12-15% aplicando regla de tomar ganancias parciales
+- **POPULOUS (PPT)**: canal alcista oct 2018, esperar ruptura confirmada antes de entrar long (ejemplo taller)
+- **TOP / CVC**: señales históricas oct 2018 del screener, TOP con +36% de ganancia, ejemplos del taller de scalping
+- **REDD/BTC**: caso didáctico oct 2018 con H&S invertido + suelo redondeado en 6H, stop 10%, horizonte 5 días
+- **PAXG (oro tokenizado)**: zona de compra como refugio durante divergencia bajista S&P500 (abr 2022)
+- **DENT**: alcista en abr 2022, mantener si ya se tiene (5% cartera), no nueva compra
+- **DATA**: llegando a zona de compra abr 2022; patrón histórico de explosión 1000% similar a KEY
+- **OGN (Origin)**: buena proyección a meses, zona de compra abr 2022
+- **UMA**: zona aceptable para entrada pequeña abr 2022
+- **MAKER (MKR)**: zona de compra sobre la media abr 2022; segundo valle rojo en semanal — si rompe soporte cae libre hasta $500
+- **TOMO**: patrón distinto a BTC, alcista con rebote operable (2020), igual que XMR/OMG/MANA
+- **OMG/USDT**: patrón alcista en 2020 con rebote operable mientras BTC cae
+- **MANA/USDT**: rebote alcista confiable en 2020, pendiente negativa con direccionalidad alcista
+- **WIN/USDT**: patrón similar a KEY/DATA con potencial 1000% pero sin historial suficiente, NO comprar (2020)
+- **UNI**: tendencia bajista, cada subida a la media es para seguir cayendo (2020); abr 2022 perdió zona volumen importante, abstenerse
+- **SXP**: rebote a la media para seguir cayendo, mismo patrón que LINK (2020)
+- **DeFi (YFI, YFII, SUSHI)**: direccionalidad bajista fuerte 2020, no operar; SUSHI sigue bajista en semanal abr 2022
+- **CELR**: no operar en 1H, posible entrada alcista en próximos días (2020) (visto en 2 videos)
+- **DAI**: formándose rango en zona baja, posible cambio de tendencia futuro, esperar confirmación (2020)
+- **AXS**: alcista en diario abr 2022, no comprar para inversión semanal
+- **1INCH**: subió fuerte hasta $7.80, buscar área de valor antes de entrar (abr 2022)
+- **OXT**: esperar cierre de vela diaria antes de operar (abr 2022)
+- **LPT**: esperar mejor punto de compra en diario, no operar rebote en 4H (abr 2022)
+- **LUNA**: alcista en diario abr 2022 (anterior al colapso documentado en 2022 posterior)
+- **JASMY, ARGON**: bajistas en todas las temporalidades, evitar (abr 2022)
+- **DOGE/SHIB y memecoins**: no analizables con estrategia técnica, evitar totalmente (abr 2022)
+- **Facebook (FB)**: bajista en diario con doble valle rojo, soporte semanal $270-280 (abr 2022)
+- **DIDI, WISH**: bajistas, evitar (abr 2022)
+- **HCT/HBAR**: alcista por estrategia abr 2022 pero NO comprar tras movimiento extraño +11,000%
+- **KCS, CRO**: tokens de exchanges importantes, ojo igual que BNB (abr 2022)
+- **CAVA/USDT**: mismo patrón que BTC en 2020, no operable por separado
+- **TAO**: divergencia alcista pero recorrido insuficiente, no entrar (2026-04-02)
+- **APD**: bajista en 4H/1H hacia zona $280 (2026-04-02)
+- **Amazon (AMZN)**: bajista desde próxima vela verde en $208 (2026-04-02)
+- **Oracle (ORCL)**: alcista con target $155, luego buscar shorts (2026-04-02)
+- **MOS (Mosaic)**: semanal alcista, target $7.38, inversión 3-6 meses con distribución de capital (2026-04-02)
+- **Hype**: rechazado en Kucoin futuros 4h (no comprable según el autor); cae más fuerte que BTC en correcciones (-2.57% mientras BTC -0.09%) — útil como vehículo short alt si se busca shortear sin ir contra BTC (visto en 3 videos)
+- **AAVE**: mismo patrón ABC que BTC, romperá al alza; mencionado caso de trader que perdió ~$50M por swap con slippage por falta de liquidez (lección sobre order book)
+- **TAO**: semanal alcista con target ~$400 (~28 abril); diario lateral/bajista; recompra zona $237-$247 (visto en 2 videos)
+- **MELI (Mercado Libre)**: gráfico diario y 4H alcista, flecha alcista del autor
+- **URA (ETF uranio)**: subió ~8% en contexto bélico; análisis técnico sugiere cautela en semanal pese a interés temático
+- **PAMP (Pampa Energía, Argentina)**: alcista en semanal/diario/4H/1H, candidato a compra (mar 2026)
+- **Google (GOOGL)**: tendencia alcista en diario/semanal/mensual, recomendada para inversión
+- **Cisco (CSCO)**: alcista en semanal y mensual, recomendada para inversión
+- **Dell (DELL)**: lateral en mensual, zona de compra ideal en $98
+- **TTWO (Take-Two)**: vender en zona $222 — software empaquetado en riesgo por IA
+- **Bimbo**: vender por formación de techo bajista con divergencia y ADX pendiente negativa
+- **Adobe / CRM / Circle**: evitar — sector software empaquetado vulnerable al avance de IA
+- **COIN (Coinbase)**: zona de compra $166 con perspectiva alcista a futuro (mar 2026)
+- **MELI / Tesla / Oracle / Amazon**: setups acciones marzo 2026 — Tesla soporte $388-410, Oracle mejor compra $7, Amazon compra $180/$170
+- **GALA**: tendencia bajista, solo rebotes, no recomienda comprar
+- **RENDER**: alcista pero ya no zona de entrada en 1H (mar 2026)
+- **LDO**: topado en resistencia, esperar ruptura y apoyo
+- **BNKR/USD**: alcista en 1H y 4H, seguir dirección alcista
+- **URA (ETF uranio feb 2026)**: lateral/alcista con posible falsa ruptura hacia $14.85 antes de continuar hacia $16
+- **Cobre (feb 2026)**: bajista corto plazo, objetivo $123-$124
+- **Chevron (CVX)**: alcista, mantener con sesgo largo
+- **Novo Nordisk**: bajista técnicamente, proyección de caída a $200
+- **SLP (Smooth Love Potion)**: totalmente desaconsejado, autor no invierte "ni el billete por respeto" (visto en 2 videos)
+- **PAXG (feb 2026)**: desconfianza como proxy del oro, prefiere oro físico o grid en PaxG/USDT como herramienta operativa, no como inversión
+- **UNI short setup 2026-03-30**: resistencia $356-358 con pendiente negativa, candidato ideal a short de libreto junto a DOT y XRP con órdenes limit
+- **Diageo**: tendencia bajista perfecta, rebotes a MM55 para seguir cayendo — candidato a short swing
+- **TSM (Semiconductores)**: zona de compra $300-$316, alcista en diario, horizonte mediano plazo
+- **ASTS**: retroceso sano, zona ideal de compra $60
+- **CLSK**: lateral complicado con sesgo bajista, short en 4H
+- **EDU**: lateral en diario y 4H, entrada long aceptable con stop 10% y paciencia
+- **ZOOM**: corrección ABC en mensual con divergencia alcista semanal, esperar retroceso en diario para entrada long
+- **BAT**: histórico jun 2019 en resistencia, target onda 3 +18.56% con stop 4.12%, esperar caída mayor antes de entrar
+- **THETA** (histórico jun 2019): pullback a línea de tendencia, entrada alcista con stop ~10% y target +43%
+- **YOYOW** (histórico jun 2019): long con +19.85% en curso, target +37%
+- **REN** (histórico jun 2019): esperar línea de tendencia para reentrada, stop 13-14%, target similar al +57% previo
+- **VET (Vechain)** (histórico jun 2019): vigilar posible setup alcista futuro, sin entrada aún
+- **XTZ (Tezos)** (histórico jun 2019): short activo +500 USD, target 210-215 si rompe POC; proyección LP $400
+- **BSV** (histórico jun 2019): proyección alcista LP $400, puede bajar más antes de entrar
+- **PHX (Phoenix/Bitfinex)** (histórico jun 2019): patrón alcista limpio sin debilidad, candidato long
+- **WAVES** (histórico jun 2019): tendencia alcista clara, entrada con stop 6.32% bajo POP (contradicción con dic 2018: "sobrevalorada divergencia bajista, NO comprar")
+- **XEM (NEM)** (histórico jun 2019): patrón alcista sin resistencias claras arriba, proyección $2-3
+- **SNGLS** (histórico jun 2019): puede reventar al alza target $440
+- **BCH** (histórico jun 2019): mínimos más altos, esperar ruptura alcista con fuerza (contradicción con prohibición personal posterior de operar BCH)
+- **DASH histórico may 2019**: setup long onda 2 Elliott, stop 5.29% bajo soporte, TP escalonado 10%/16%/19%/25%
+- **GNT histórico may 2019**: long esperando caída a soporte POC, stop 7.91%, target +37% (ratio ~1:4.7)
+- **SC (Siacoin) histórico may 2019**: target cumplido +36% desde entrada previa, zona de tomar ganancias
+- **GNT (Golem)**: histórico may 2019 long con stop 5.70%, targets escalonados +15.24% y +20%, onda 3 Elliott en desarrollo
+- **SKY (Skycoin)**: histórico may 2019 triángulo con divergencia positiva MACD, proyección alcista +44% tras ruptura
+- **ZIL/USDT**: histórico nov 2019 setup alcista con cruce de medias, stop 8-9%, target +24%
+- **FTM (Fantom)**: zona de acumulación nov 2019 por ausencia de oferta, vale empezar a acumular spot
+- **ICX histórico oct 2019**: impulso alcista esperado hacia $60-$65 con patrón de suelo redondeado
+- **ATOM/BTC histórico oct 2019**: patrón alcista con objetivos 450-550 satoshis, resistencia 639 sat
+
+## Patrones recurrentes observados
+- Doble suelo en semanal/diario como antesala de rebote correctivo (visto en 4 videos)
+- Doble techo en semanal/diario tocando MM55 con divergencia bajista como zona para tomar ganancias (visto en 2 videos)
+- Bull trap dentro de onda B-C de Elliott: rebote fuerte antes de caída mayor; onda B alcista precede caída de onda C que define entrada long real (visto en 23 videos)
+- **Pauta plana ABC de continuación alcista en 4H**: onda C retrocediendo hasta MM55 + POC sin fuerza bajista = setup long fractal del patrón semanal de BTC en 2023 ($25K) (visto en 22 videos)
+- Lateralizaciones prolongadas tras caídas, ideales para grid neutral (visto en 4 videos)
+- Divergencia bajista en 4H/1H + quiebre de estructura + vela verde final = fin de tramo alcista corto dentro de tendencia mayor alcista (visto en 5 videos)
+- Correlación bajista cruzada entre SP500, oro, cobre y petróleo en semanal (fortaleza del dólar)
+- En crisis macro, BTC correlaciona a la baja con índices (precedente marzo 2020)
+- Consolidaciones previas a cierres semanales/mensuales tienden a baja volatilidad
+- Quiebre de línea de tendencia con volumen vendedor dominante = cambio real de tendencia (visto en 6 videos)
+- Pinbar con rechazo del 70% en zonas de sobreventa = señal de fin de caída (visto en 2 videos)
+- Tras ruptura alcista desde soporte, precio suele llegar a zona de tejoden (visto en 2 videos)
+- Zonas de euforia proyectada al final del ciclo (ej. $90-110K BTC) funcionan como bulltrap de salida (visto en 4 videos)
+- Altcoins replican comportamiento de BTC pero con mayor volatilidad a la baja (visto en 6 videos)
+- Ruido mediático por eventos macro genera caídas que se revierten en días sin impacto técnico real (visto en 2 videos)
+- **Máximo reciente que no rompe con fuerza el anterior** = NO es Bull Run verdadero, sino posible trampa lateral
+- **Extrema avaricia en índice miedo/codicia sin ruptura de máximos** = ballenas preparan barrida de minoristas
+- **Objetivos alcistas semanales/mensuales se moderan** conforme el precio sube
+- **Zona media del lateral con POC sin volumen** = tierra de nadie, no operar (visto en 2 videos)
+- **Correlación bajista simultánea oro + plata + BTC** en días puntuales (martes santo) = rotación macro corta hacia dólar
+- **Bots de exchanges replican patrones casi calcados en altcoins**: gráficos de proyectos distintos con misma forma sugieren actividad algorítmica coordinada
+- **Velas anómalas extremas en exchanges manipulados** (Kraken 7,989-12,019; BitFinex/Binance vela $19; Bitfinex derivados $15K) liquidan cuentas en ambas direcciones simultáneamente — evitar sobreapalancarse en estos venues
+- **Tras cruce alcista de medias móviles, primer toque a la MM marrón suele rechazar** = oportunidad de short corto antes de continuación alcista mayor (recurrente en altcoins en diario)
+- **Eventos macro esperados como bajistas que no mueven el precio como se anticipa** (Bakkt sept 2019 con bajo volumen): las narrativas no son motor real, el técnico manda
+- **BTC tiende a cerrar gaps del CME**: gap pendiente actúa como imán/objetivo del precio durante meses
+- **Alt season requiere suelo redondeado en BTC + cruce alcista MM azul sobre marrón sin romperla en primer retroceso**
+- **Bandera/banderín de continuación tras impulso**: zona de consolidación que no define dirección; esperar ruptura confirmada antes de operar (ej. BTC bandera $9,100-$10,800 jul 2019)
+- **Triángulo con fuerza alcista latente**: consolidación con MACD divergente positivo bajo zona cero anticipa ruptura alcista pese a precio plano
+- **Suelo redondeado en total cap altcoins con mínimos más altos en 4H**: anticipa rebote técnico de 3-5 días en altcoins dentro de bajista mayor (visto en 2 videos)
+- **Distribución en zona alta del rango (ballenas venden, retail compra)**: anticipa caída desde resistencia clave hacia parte baja del rango
+- **Caída abrupta de ~2,000 USD en 45 min coincidiendo con mantenimientos simultáneos de múltiples exchanges** (Bitfinex, Coinbase, Binance, Kraken, Robinhood, Gemini) = manipulación coordinada tras máximos (visto en 4 videos)
+- **Operador grande cerrando todos sus shorts en Bitfinex** = señal de movimiento institucional importante próximo, vigilar
+- **Tiempos cada vez más largos para lograr nuevos máximos con ADX descendente** = agotamiento alcista antes de corrección ABC
+- **Velas doji de indecisión en zona de resistencia tras impulso débil sin volumen**: anticipan corrección bajista (ej. BTC $3,972 marzo 2019)
+- **Divergencia alcista en RSI sobrevendido + soporte respetado** = señal de rebote contra-tendencia, especialmente cuando masas esperan ruptura bajista (visto en 2 videos)
+- **Cuarto toque a resistencia histórica sin volumen** = probabilidad alta de rechazo y corrección ABC (ej. BTC $4,000-$4,200 marzo 2019) (visto en 2 videos)
+- **Mínimos crecientes en 45min/1H tras pérdida de fuerza bajista** + precio sobre EMA 20 = validación de continuación alcista lenta y gradual
+- **Banderín bajista en BTC con MACD bajista** suele preceder ruptura alcista por trampa a vendedores apostando a la baja (visto en 2 videos)
+- **Señales falsas de RSI sobrevendido + cruce MACD alcista en bajista mayor**: trampa para liquidar longs antes de continuación bajista; las señales clásicas de compra se invierten en mercados manipulados
+- **Rangos laterales muy estrechos (10-20 USD en BTC) suelen reventar con fuerza**: tras consolidación prolongada, esperar movimiento direccional violento — no operar dentro del rango, sí operar la ruptura (visto en 4 videos)
+- **Hard fork programado como catalizador alcista de corto plazo**: ruptura de resistencia apoyada en noticia fundamental (ej. ETH hard fork 11-12 ene 2019, similar al efecto previo de BCH)
+- **Convergencia pequeña + cruce alcista MACD + ADX rompiendo 23 con pendiente positiva en 4H**: confluencia de entrada long apoyada por catalizador fundamental
+- **Hombro-cabeza-hombro en 4H BTC** ($4,183 cabeza → caída a $3,928) como confirmación de continuación bajista tras agotamiento de impulso (visto en 3 videos)
+- **Vencimiento de futuros CME que no genera volatilidad esperada**: mercado puede ignorar el evento si liquidez baja, esperar apertura de sesión asiática (domingo) para movimiento real
+- **Exceso de posiciones long en BitMEX/derivados** = señal contraria, el precio buscará liquidar esos longs antes de cualquier rebote alcista real (visto en 3 videos)
+- **Doble suelo en 1H tras caída fuerte como zona no operable**: alerta para shorts pero sin confirmación de reversión; esperar pauta plana o ruptura antes de operar
+- **Triángulo simétrico en zona de indecisión con cruce MACD**: no operar hasta que precio alcance base del triángulo y consolide — entrada long recién tras lateralización confirmada (visto en 3 videos)
+- **Divergencia precio BTC entre exchanges simultáneos**: BitMEX mostrando bajada mientras Binance mostraba subida = señal de manipulación coordinada, no operar
+- **Máximos cada vez más altos + divergencia alcista MACD + cierre mes alcista histórico (nov-dic)**: confluencia estacional-técnica en BTC para proyectar long multi-semana
+- **Movimiento alcista atípico de una altcoin desacoplándose de BTC**: señal de rotación sectorial, prioridad de trading sobre el activo desacoplado (ej. XRP vs BTC oct 2018)
+- **Diferencial de precio BTC entre BitMEX y Binance ($400 → $100)**: estrechamiento del spread señala normalización del arbitraje y fin de fase de pánico/manipulación extrema (visto en 2 videos)
+- **Ballena comprando ~30,000 BTC rompe tendencia bajista establecida**: acción individual de actor grande puede invalidar patrón técnico multi-mes; buscar confirmación de consolidación antes de asumir cambio de tendencia
+- **Zona de acumulación con mínimos decrecientes pero volumen bajo**: no operar hasta confirmación en 4H, evitar ruido de 1H (demasiado scalping); esperar cruce alcista MACD para activar compras
+- **Altcoins amplifican BTC ~3x en correcciones**: caída del 3% en BTC arrastra altcoins entre 5-10% por dominancia, evitar operar rebotes alt durante bajadas BTC (visto en 8 videos)
+- **Divergencia bajista grave en semanal del S&P500** = anticipa corrección importante en cripto por correlación, motivo para no concentrarse en dólar
+- **Total cripto market cap (excluyendo BTC) en mal estado semanal** = filtrar altcoins con doble cuidado, predominio bajista sectorial
+- **Mechazo a parte alta del lateral con rechazo inmediato ("tejoden" en ruptura)**: ruptura falsa de $74,200 invalida continuación alcista inmediata y proyecta nuevo lateral $69-74K antes de reanudar tendencia — no perseguir la ruptura, esperar el retroceso a parte baja (visto en 4 videos)
+- **Squeeze alcista por liquidación masiva de shorts tras ruptura de lateral largo**: tras un mes de rango ($60-70K), la ruptura al alza liquida shorts apalancados y acelera el movimiento — señal de que abrir shorts contra tendencia mayor es estructuralmente perdedor
+- **Compresión de medias móviles hacia el precio dentro de lateral prolongado**: anticipa ruptura violenta de $20K-$30K cuando se resuelva el rango (BTC lateral 60-70K feb-mar 2026) (visto en 5 videos)
+- **Bitcoin descontando eventos macro/bélicos antes de que ocurran**: cuando el precio no reacciona a noticia esperada bajista (guerra, geopolítica), el evento ya está descontado en la caída previa (visto en 4 videos)
+- **Vela roja fuerte en oro/plata durante tendencia alcista confirmada** = barrido de stops/manipulación antes de continuar al alza; no interpretar como cambio de tendencia si el contexto semanal sigue alcista
+- **Caídas premeditadas ejecutadas en fin de semana con baja liquidez**: movimientos tipo $90K→$60K en BTC ocurren cuando CEX tienen menos volumen, liquidando apalancados; no dejar posiciones abiertas overnight fin de semana
+- **ETH no acompaña rally de BTC = manipulación**: cuando BTC sube con fuerza pero ETH queda plano en la misma vela, suele ser liquidación de shorts apalancados en BitMEX, no impulso real; esperar corrección
+- **Banderín/triángulo con divergencia bajista MACD + RSI diario sobrecomprado**: anticipa ruptura bajista hacia onda 4 de Elliott tras rally manipulado
+- **Osos tardan más en tumbar el precio que toros en recuperarlo** = presión compradora dominante; sesgo alcista sigue vigente pese a patrón H&S visible en 4H
+- **ETH adelantándose al movimiento alcista de BTC en onda 5 de Elliott**: cuando ETH toca antes su target proyectado, valida continuación alcista pendiente de BTC
+- **Tiempo más largo sobre resistencia que sobre soporte** = confirmación de sesgo alcista estructural; cuando el precio consolida más arriba que abajo del nivel clave, la dirección está decidida
+- **BTC spot y futuros cayendo simultáneamente** (divergencia inusual) = señal de distribución coordinada y no manipulación de un solo venue; leer como caída más estructural que manipulativa
+- **Patrón casi idéntico replicado en BTC y la mayoría de altcoins simultáneamente** = riesgo sistémico de correlación: operar pocas posiciones porque una sola caída arrastra toda la cartera en cadena (visto en 2 videos)
+- **Caída de infraestructura cloud (AWS) generando wicks falsos en exchanges asiáticos**: los exchanges ejecutan rollback de las operaciones anómalas; no son oportunidades de compra reales sino artefactos técnicos a ignorar
+
+## Videos fuente procesados
+- 2023-04-13: #BITCOIN LATERAL, GRID TRADING ACTIVADO /1081
+- 2023-04-13: #BITCOIN Y GESTION DEL RIESGO! /V1151
+- 2024-04-13: #BITCOIN + PSICOLOGIA DEL TRADER! /V1185
+- 2024-04-13: #BITCOIN EL EXITO DEPENDE DE TU GESTION! /V1249
+- 2025-04-13: #BITCOIN OPERATIVA CON SPOT INFINITY GRID! /V1484
+- 2025-05-13: Pauta plana de continuación alcista 4h #Bitcoin
+- 2025-10-13: ¡Operando Bitcoin en 1H! Estrategias para Ganancias Rápidas
+- 2026-04-16: #BITCOIN CUIDADO CON ESTA MANIPULACION QUE SE VIENE!
+- 2025-04-13: ¿Cómo funciona el cruce de la muerte #BITCOIN?
+- 2025-04-13: ¡No Caigas en la Trampa! Cómo Identificar un Lateral en Bitcoin
+- 2025-07-13: Bitcoin Lateral: Cómo No Perder en Periodos de Estabilidad
+- 2026-04-04: Bitcoin Stagnant: Silent Accumulation or Trap?
+- 2020-04-13: BITCOIN MURIÓ, ANÁLISIS Y PROYECCIÓN /V251
+- 2020-04-13: 1,000$ RIFA PARA SUSCRIPTORES, PROYECCIÓN /V252
+- 2020-04-13: BITCOIN HOY, ANÁLISIS Y PROYECCIÓN /V250
+- 2020-04-13: LOS EXCHANGE MANIPULAN TODO EN CRIPTOMONEDAS /V249
+- 2020-04-13: LAS CRIPTOMONEDAS ESTÁN ALCISTAS, QUE HACEMOS? /V247
+- 2020-04-13: BITCOIN SERÁ ALCISTA O BAJISTA (SEPTIEMBRE) /V246
+- 2020-04-13: CRIPTOMONEDAS PROYECCIÓN (SEPTIEMBRE) /V245
+- 2020-04-13: BITCOIN y CRIPTOMONEDAS PROYECCIÓN (SEPTIEMBRE) /V244
+- 2020-04-13: BITCOIN PROYECCIÓN del PRECIO (SEPTIEMBRE) /V242
+- 2020-04-13: ORO Y BITCOIN PROYECCIÓN del PRECIO (SEPTIEMBRE) /V243
+- 2020-04-13: PROYECCIÓN BTC Y CRIPTOS AGOSTO 2019 /V230
+- 2020-04-13: HABLEMOS SOBRE LA ALTSEASON, PROYECCIÓN BTC /V229
+- 2020-04-13: BITCOIN Y CRIPTOMONEDAS EN SUPERVIVENCIA /V228
+- 2020-04-13: BITCOIN Y CRIPTOS, FIN DE SEMANA AGOSTO /V227
+- 2020-04-13: 8,200$ ó 11,400$ EN BITCOIN PARA AGOSTO 2019 /V225
+- 2020-04-13: ANÁLISIS BTC Y CRIPTOS PARA AGOSTO 2019 /V226
+- 2020-04-13: ANÁLISIS BTC Y CRIPTOS JULIO 2019 /V223
+- 2020-04-13: PROYECCIÓN BITCOIN PARA FIN DE JULIO 2019 /V224
+- 2020-04-13: BITCOIN A LOS 11,200$ - CRIPTOS JULIO 2019 /V222
+- 2020-04-13: BITCOIN A LOS 8,500$ O OTRO BULLRUN? /V221
+- 2020-04-13: BITCOIN A LOS 8,500$? - CRIPTOS JULIO 2019 /V220
+- 2020-04-13: PROYECCIÓN BITCOIN CRIPTOS JULIO 2019 /V219
+- 2020-04-13: BITCOIN ROMPE LOS 12,000$ JULIO 2019 /V215
+- 2020-04-13: PROYECCIÓN BITCOIN 8,500$ JULIO 2019 /V214
+- 2020-04-13: ANÁLISIS PROYECCIÓN BITCOIN JULIO 2019 /V216
+- 2020-04-13: BITCOIN ROMPERÁ LOS 15,000 DOLARES? /V213
+- 2020-04-13: PRÓXIMO MÁXIMO BITCOIN Y CRIPTOS /V210
+- 2020-04-13: SIGUIENTE MOVIMIENTO DE BITCOIN /V211
+- 2020-04-13: 7,000$ ó 15,000$ EN BITCOIN ALTCOINS /V212
+- 2020-04-13: PROYECCIÓN BITCOIN CRIPTOS FIN DE JUNIO /V209
+- 2019-04-13: Análisis BTC, KEY, NANO, ELECTRONEUM /V170
+- 2019-04-13: Análisis criptos XEM WAVES MDA RVN HOT /V169
+- 2019-04-13: Análisis Ripple, Stellar, Neo, Eos, Cardano /V167
+- 2019-04-13: Proyección BTC y Criptos 21-22 Marzo /V166
+- 2019-04-13: Análisis BTC y Altcoins NPXS ZRX IOTA ONT BTT /V168
+- 2019-04-13: No operes criptos antes de ver este vídeo, Gestión del riesgo /V164
+- 2019-04-13: Análisis BTC, Tron, Zcash y Mana /V165
+- 2019-04-13: Análisis BNB, XBT y ETHER /V163
+- 2019-04-13: Proyección Criptos Marzo 2019, ETH y BTC /V161
+- 2019-04-13: Análisis BTC, ETH, LTC Marzo 12-13 /V162
+- 2019-04-13: Que pasa con Bitcoin Fin de febrero /V160
+- 2019-04-13: Market Analysis February 26-27 2019 /V159
+- 2019-04-13: Análisis Express BTC y Litecoin /V156
+- 2019-04-13: Proyección Mercado Cripto 23-24 Febrero /V158
+- 2019-04-13: Cryptocurrency Projection XBT EOS LTC TRX XRP /V157
+- 2019-04-13: Litecoin and Bitcoin Long or Short BitMEX /V153
+- 2019-04-13: BTC Ripple EOS Tron Proyección /V155
+- 2019-04-13: Análisis Mercado Criptos clase psicología /V154
+- 2019-04-13: Proyección Criptomonedas Febrero 2019 /V152
+- 2019-04-13: Que pasará con Bitcoin Sube o Baja /V151
+- 2019-04-13: Proyección BTC Ripple Litecoin /V150
+- 2019-04-13: Cryptocurrencies Falling Projection Jan 21-22 /V148
+- 2019-04-13: Cryptocurrency Trading TRON Bitcoin /V149
+- 2019-04-13: El Lateral Criptomonedas amenaza tendencial /V147
+- 2019-04-13: Cryptocurrency Forecast Jan 15-16 BitMEX /V146
+- 2019-04-13: Cryptocurrency Forecast 2019 January Weekend /V145
+- 2019-04-13: What's happening with cryptocurrencies BTC falling /V144
+- 2019-04-13: Proyección de criptomonedas Enero 2019 /V142
+- 2019-04-13: Crypto Projections Ripple Litecoin BTC ETH Hard Fork /V143
+- 2019-04-13: Feliz Navidad CriptoAmigo
+- 2019-04-13: Criptomonedas 2019, Análisis BTC y ETH Hard Fork /V141
+- 2019-04-13: Bitcoin Ya no tiene Fuerza Fin de Año /V139
+- 2019-04-13: Proyección BTC y criptomonedas 30-31 Diciembre /V140
+- 2019-04-13: Proyección de Bitcoin Navidad 2018 /V138
+- 2019-04-13: Bitcoin Seguirá subiendo o Volverá a caer? /V137
+- 2019-04-13: Bitcoin Análisis Long en Bitfinex /V136
+- 2019-04-13: Scalping Justo En La Bajada de Bitcoin /V134
+- 2019-04-13: Bitcoin Morirá? Análisis y Proyección /V135
+- 2019-04-13: Que pasará con bitcoin próximos días Bitmex /V133
+- 2019-04-13: Bitcoin Inicio de diciembre Análisis Corto Plazo /V132
+- 2019-04-13: Bitcoin seguirá subiendo o es un bulltrap? Operando en Bitmex /V131
+- 2019-04-13: Reversión de tendencia en Bitcoin? XBT LTC y Ripple /V130
+- 2019-04-13: Alerta! No caigas en las Trampas, Análisis Rápido /V129
+- 2019-04-13: Que pasa con Bitcoin, Especulación y Psicología /V128
+- 2019-04-13: How low will Bitcoin go? Market psychology /V127
+- 2019-04-13: Predicción Fin de Año 2018, Ripple y Bitcoin Cash /V124
+- 2019-04-13: Proyección Bitcoin 10 y 11 Noviembre, Bitmex /V123
+- 2019-04-13: Estrategia de trading Bitmex, BTC y Ripple /V126
+- 2019-04-13: Reflection: Technical Analysis, Bitcoin /V122
+- 2019-04-13: Que esta pasando con Bitcoin? Margen de maniobra /V125
+- 2019-04-13: Predicción BTC primera semana noviembre /V120
+- 2019-04-13: Taller Intradía Clase#1 rebotes y rupturas /V121
+- 2019-04-13: Proyección BTC 25-26 octubre /V117
+- 2019-04-13: Taller Scalping Clase#2 screener TradingView /V118
+- 2019-04-13: Proyección BTC 24 octubre, XRP desacoplado /V116
+- 2019-04-13: BTC proyección 30-31 octubre rebote a SMA20 /V119
+- 2019-04-13: BTC fin de semana, Bakkt, Adam White ICE /V115
+- 2019-04-13: BTC 18-19 octubre, Bitfinex tendencia /V114
+- 2019-04-13: Taller Scalping TradingView + Poloniex API /V113
+- 2019-04-13: Análisis BTC 12 octubre, acumulación escalonada /V112
+- 2021-04-13: BITCOIN CRIPTOMONEDAS EN PELIGRO /V467
+- 2022-04-13: BITCOIN PIERDE LOS 60 MIL + LIQUIDACIONES /V825
+- 2022-04-13: ALERTA BITCOIN AQUI /V802
+- 2026-04-02: BTC CRASHES INTO 69K BRUTAL REJECTION OR HISTORIC BREAKOUT
+- 2026-03-30: BITCOIN ROMPE LOS $71,000 Esto ACABA de pasar
+- 2026-03-30: ¿Comprar Bitcoin en 70K o esperar el CRASH?
+- 2026-04-03: Bitcoin cae y así es como se hacen MILLONARIOS
+- 2026-03-23: BTC en 71K La zona que DEFINE TODO
+- 2026-03-23: Bitcoin en la Zona de VIDA o MUERTE Soporte 70K
+- 2026-03-23: Bitcoin at 70K Buy NOW or HEAVY DROP coming
+- 2026-03-23: BITCOIN ROMPIO EL RANGO?
+- 2026-03-13: Guerra mundial financiera el papel de Bitcoin
+- 2026-03-16: DON'T IGNORE THIS CHART Save Thousands in Bitcoin
+- 2026-03-23: BITCOIN 75K YA ES TARDE PARA ENTRAR
+- 2026-03-13: GUERRA GEOPOLITICA Por Que Bitcoin Se Vuelve Clave
+- 2026-03-13: BlackRock limita retiros de uno de sus mayores fondos
+- 2026-03-13: Bitcoin today: Explosive rebound and higher target
+- 2026-03-13: BTC camino a 70 MIL: PÁNICO o ACUMULACIÓN INTELIGENTE
+- 2026-03-13: Bitcoin vs 70K: The Decisive Moment Is Here
+- 2026-03-13: Bitcoin HOY: El Precio Actual Podría Sorprenderte
+- 2026-03-13: Bitcoin en Rango: Soporte, Resistencia y Próximo Breakout
+- 2026-03-13: Si Bitcoin rompe los 70K esto cambiará TODO
+- 2026-03-13: Bitcoin Liquidity Pools: The Trap Before the Big Move
+- 2026-03-13: BITCOIN en 70,000 ¿Se Viene el Rebote MÁS FUERTE del Año?
+- 2026-03-13: Bitcoin a Punto de un Movimiento Explosivo | Prepárate
+- 2026-03-13: Bitcoin a punto de romper con fuerza: movimiento inminente
+- 2026-02-13: Rebote técnico en Bitcoin: ¿60,000 fue el suelo del mercado?
+- 2026-02-13: Precio de Bitcoin hoy: análisis realista y niveles clave
+- 2026-02-13: Oro y plata en caída: así se construyen las grandes fortunas
+- 2019-04-13: Analisis mercado criptomonedas en vivo V172
+- 2019-04-13: Proyeccion BTC punto de vista tendencial V173
+- 2019-04-13: Analisis BTC y criptomonedas tendencias V174
+- 2019-04-13: Cual sera el proximo movimiento BTC V175
+- 2026-04-08: They screw you over PERFECTLY and then Bitcoin EXPLODES
+- 2026-04-01: Hunting stops: the truth behind the massive BTC liquidations
+- 2026-03-30: Most people lose money in Bitcoin because of this: THEY DON'T KNOW HOW TO WAIT
+- 2026-01-13: Bitcoin sideways: the perfect trap for futures traders
+- 2026-01-13: Bitcoin Futures: How to Trade Without Blowing Up Your Account
+- 2025-10-13: Operando Bitcoin en 1H Estrategias para Ganancias Rápidas
+- 2025-08-13: Operación de Futuros Fallida Cómo Recuperarte y No Repetir el Error
+- 2025-04-13: RIESGOS Y GESTION DE CAPITAL #BITCOIN #ORO /V1421
+- 2025-04-13: Los Riesgos Ocultos al Operar Bitcoin
+- 2020-04-13: SUBE O BAJA BITCOIN SEGUN TENDENCIA /V183
+- 2020-04-13: SEGUIRÁ BITCOIN SUBIENDO? PROYECCION TENDENCIAL /V186
+- 2020-04-13: PROYECCIÓN Y ANALISIS DE BITCOIN JUNIO 2019 /V202
+- 2020-04-13: PROYECCIÓN DE PRECIO Y TENDENCIA DE BITCOIN JUNIO 2019 /V203
+- 2020-04-13: PROYECCIÓN DE BITCOIN ORO Y CRIPTOMONEDAS /V231
+- 2020-04-13: PROYECCIÓN de BITCOIN y CRIPTOMONEDAS Septiembre 2019 /V239
+- 2020-04-13: PROYECCIÓN BTC y ALTCOINS junio 2019 /V201
+- 2020-04-13: PROYECCIÓN BITCOIN y tendencia altcoins junio 2019 /V205
+- 2020-04-13: PROYECCION Y ANALISIS BITCOIN junio 2019 /V199
+- 2020-04-13: PROYECCION DE BITCOIN Y CRIPTOS EN VIVO /V194
+- 2020-04-13: HASTA DONDE BAJARÁ BITCOIN Y LAS CRIPTOMONEDAS /V232
+- 2020-04-13: CAERÁ BITCOIN ESTE FIN DE SEMANA? /V204
+- 2020-04-13: BITCOIN Y CRIPTOS CON PROYECCIÓN EN VIVO /V234
+- 2020-04-13: BITCOIN Y CRIPTOS #SINFOMO HASTA DONDE BAJARA BITCOIN? /V235
+- 2020-04-13: BITCOIN SUPERARA LOS 13,000 DOLARES? /V208
+- 2020-04-13: BITCOIN SUBIENDO, ANALISIS! /V303
+- 2020-04-13: BITCOIN SEGUIRÁ SUBIENDO? PROYECCION Y ANALISIS DE ALTCOINS /V195
+- 2020-04-13: BITCOIN SEGUIRA CAYENDO? O SE MANTENDRA EN UN LATERAL JUNIO 2019 /V200
+- 2020-04-13: BITCOIN RUPTURA BAJISTA? HASTA DONDE BAJARÁ? /V238
+- 2020-04-13: BITCOIN PRÓXIMO CRASH? VEAMOLO EN ESTA PROYECCIÓN /V233
+- 2020-04-13: BITCOIN EN ZONA FINAL, A LA ALZA O A LA BAJA? /V237
+- 2020-04-13: BITCOIN EN FASE DE NEGACIÓN? /V261
+- 2020-04-13: BITCOIN EN 0,32$ CENTAVOS EN ASIA? NO PARA NADA! /V236
+- 2020-04-13: BITCOIN CAERÁ FUERTEMENTE? PROYECCION ALTCOINS /V196
+- 2020-04-13: ANÁLISIS BITCOIN Y CRIPTOS SEPTIEMBRE 2019 /V240
+- 2020-04-13: ANÁLISIS BITCOIN | LIBRA FACEBOOK OPINIÓN /V207
+- 2020-04-13: ANALIZANDO EL MERCADO CRIPTO EN VIVO BITCOIN V191
+- 2020-04-13: ANALISIS DE ALTCOINS Y CRIPTOS EN VIVO BAJO DEMANDA V191
+- 2020-04-13: PROYECCIÓN DE BITCOIN Y CRIPTOS NOVIEMBRE 2019 V272
+- 2020-04-13: Es momento de COMPRAR bitcoin o no V298
+- 2020-04-13: BITCOIN 7000$ ANÁLISIS, ORO Y PETROLEO V338
+- 2020-04-13: PROYECCIÓN DE BITCOIN y CRIPTOMONEDAS V256
+- 2020-04-13: BITCOIN es HORA de COMPRAR más V312
+- 2019-04-13: Que paso con Bitcoin bullrun Liquidaciones Bitmex V171
+- 2019-04-13: Feliz Navidad CriptoAmigo
+- 2026-04-21: Toma de Ganancias BTC rebote 4h
+- 2026-04-21: Tomar ganancias 70K vs objetivos irreales
+- 2026-04-21: Toma de ganancias escalonada por temporalidad
+- 2021-04-13: BITCOIN SEMANAL Y TENDENCIA ANALISIS EN VIVO /V459
+- 2023-04-13: BITCOIN ROMPE 20 MIL DONDE ESTARIA EL SIGUIENTE SOPORTE /V1007
+- 2021-04-13: EL LATERAL EL PEOR ENEMIGO DEL INVERSOR TENDENCIAL /V413
+- 2023-04-13: BITCOIN EN PROBLEMAS Y EL SOPORTE /V1021
+- 2021-04-13: RUPTURA DE 10K EN BITCOIN ANALISIS DE CRIPTOMONEDAS /V448
+- 2023-04-13: BITCOIN ROMPE LOS 30000 TRAMPA U OPORTUNIDAD Talentland 2023
+- 2023-04-13: BITCOIN ROMPE 19 MIL EN VIVO /1076
+- 2020-04-13: SP500 sectores con fuerte volumen e inversiones 2020 /V331
+- 2022-04-13: Bitcoin más stop loss y liquidaciones /V716
+- 2023-04-13: Bitcoin sobre soporte último antes de 24 mil /V999
+- 2021-04-13: Bitcoin bajista si pierde el soporte /V552
+- 2025-04-13: ¿Bitcoin romperá los 100k en diciembre 2024?
+- 2026-02-13: Bitcoin pierde los 70K, ¿corrección sana o algo más?
+- 2026-02-13: Bitcoin en $95,000, ¿aún conviene comprar o es tarde?
+- 2026-02-13: Bitcoin al límite, señales de fondo que no puedes ignorar
+- 2026-02-13: Bitcoin esta semana, ¿explosión alcista o trampa?
+- 2026-02-13: Bitcoin 83K caída fuerte, decisión clave
+- 2026-02-13: Bitcoin reaches 93K | Here's what's next
+- 2026-02-13: Bitcoin cae y el miedo domina: ¿qué sigue realmente?
+- 2026-02-13: Bitcoin 73,000 USD: ¿pánico minorista o entrada perfecta?
+- 2026-02-13: Bitcoin No Se Mueve y Eso es EXTREMADAMENTE PELIGROSO
+- 2026-02-13: As Bitcoin falls, the big players are doing this

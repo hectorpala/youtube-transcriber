@@ -1,0 +1,66 @@
+{
+  "description": "BTC-USDT · 1W alcista + 1D alcista + 4H con pauta plana ABC + trigger T003 (cierre sobre swing_high con volumen). Debe producir decision=enter_long y risk_plan con SL, TP, apalancamiento.",
+  "expected_decision": "enter_long",
+  "expected_applicable_rule_ids": ["C001", "C002", "S001", "T003", "R001", "R003", "E001"],
+  "snapshot": {
+    "symbol": "BTC-USDT",
+    "as_of": 1776830400000,
+    "flags": {
+      "position_open": false,
+      "emotional_ok": true,
+      "last_stop_timestamp": null
+    },
+    "portfolio": {"capital_usd": 15000},
+    "timeframes": {
+      "1W": {
+        "timeframe": "1W",
+        "bars": [],
+        "indicators": {
+          "mm55": 65000,
+          "mm55_prev": 64500,
+          "adx": 28.0,
+          "adx_prev": 26.0
+        }
+      },
+      "1D": {
+        "timeframe": "1D",
+        "bars": [],
+        "indicators": {
+          "mm55": 68000,
+          "mm55_prev": 67600,
+          "adx": 25.0,
+          "adx_prev": 24.0
+        }
+      },
+      "4H": {
+        "timeframe": "4H",
+        "bars_explanation": "12 bars forming an ABC pattern: initial rally 70K→74K, pullback to 70.5K (onda C near MM55+POC), breakout to 75K with high volume in the last bar",
+        "bars": [
+          {"timestamp": 1776657600000, "open": 70000, "high": 71200, "low": 69900, "close": 71000, "volume": 1000},
+          {"timestamp": 1776672000000, "open": 71000, "high": 72500, "low": 70800, "close": 72400, "volume": 1100},
+          {"timestamp": 1776686400000, "open": 72400, "high": 74000, "low": 72200, "close": 73900, "volume": 1300},
+          {"timestamp": 1776700800000, "open": 73900, "high": 74200, "low": 73100, "close": 73400, "volume": 900},
+          {"timestamp": 1776715200000, "open": 73400, "high": 73600, "low": 71800, "close": 72000, "volume": 850},
+          {"timestamp": 1776729600000, "open": 72000, "high": 72200, "low": 70600, "close": 70800, "volume": 1000},
+          {"timestamp": 1776744000000, "open": 70800, "high": 71300, "low": 70500, "close": 70600, "volume": 800},
+          {"timestamp": 1776758400000, "open": 70600, "high": 71400, "low": 70400, "close": 71300, "volume": 900},
+          {"timestamp": 1776772800000, "open": 71300, "high": 72200, "low": 71100, "close": 72100, "volume": 950},
+          {"timestamp": 1776787200000, "open": 72100, "high": 73500, "low": 72000, "close": 73400, "volume": 1100},
+          {"timestamp": 1776801600000, "open": 73400, "high": 74100, "low": 73200, "close": 74000, "volume": 1200},
+          {"timestamp": 1776816000000, "open": 74000, "high": 75100, "low": 73900, "close": 75000, "volume": 2200}
+        ],
+        "indicators": {
+          "mm55": 70500,
+          "mm55_prev": 70400,
+          "adx": 24.0,
+          "adx_prev": 23.0,
+          "poc": 71000,
+          "vah": 74200,
+          "val": 69000,
+          "atr": 900,
+          "volume_sma20": 1050
+        }
+      }
+    }
+  }
+}
