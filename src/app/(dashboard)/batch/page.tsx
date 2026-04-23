@@ -24,7 +24,74 @@ import {
   hasActiveBatch,
   getNextPendingVideos,
   createBatchWithVideos,
+  getSetting,
 } from "@/lib/db";
+import { updateChannelBrainChunked } from "@/lib/brain-batch";
+
+const EXPORT_DIR_KEY = "export_dir";
+const DEFAULT_EXPORT_DIR = "/Users/openclaw/Documents/trading-knowledge";
+
+// Export + summarize one video, WITHOUT updating CEREBRO.md.
+// The brain is updated once per batch (see flushPendingBrain in BatchViewPage)
+// to avoid paying the ~4min-per-video CEREBRO rewrite cost on every video.
+async function exportAndSummarizeVideo(
+  channelId: string,
+  videoId: string,
+  text: string,
+  method: string,
+  language: string,
+): Promise<{ channelDir: string; filePaths: string[] } | null> {
+  try {
+    const [channel, dir] = await Promise.all([
+      getChannel(channelId),
+      getSetting(EXPORT_DIR_KEY).then((v) => v ?? DEFAULT_EXPORT_DIR),
+    ]);
+    if (!channel) return null;
+    const { getDb } = await import("@/lib/db");
+    const db = await getDb();
+    const rows = await db.select<{ title: string; url: string; duration: number | null; published_at: string | null; tags: string | null }[]>(
+      "SELECT title, url, duration, published_at, tags FROM videos WHERE id = $1",
+      [videoId]
+    );
+    const v = rows[0];
+    if (!v) return null;
+
+    const exportRes = await invoke<{ exported_files: string[]; output_dir: string }>("export_channel", {
+      request: {
+        channel_name: channel.name,
+        channel_handle: channel.handle,
+        channel_url: channel.url,
+        output_dir: dir,
+        videos: [{
+          id: videoId,
+          title: v.title,
+          url: v.url,
+          duration: v.duration,
+          published_at: v.published_at,
+          language: language,
+          transcription_method: method,
+          full_text: text,
+          tags: v.tags,
+        }],
+      },
+    });
+
+    const summarized: string[] = [];
+    for (const filePath of exportRes.exported_files) {
+      try {
+        await invoke("summarize_video", { filePath });
+        summarized.push(filePath);
+      } catch (sumErr) {
+        console.error("Summary failed for", videoId, sumErr);
+      }
+    }
+    if (summarized.length === 0) return null;
+    return { channelDir: exportRes.output_dir, filePaths: summarized };
+  } catch (err) {
+    console.error("Auto-export failed for video", videoId, err);
+    return null;
+  }
+}
 import {
   ArrowLeft,
   Play,
@@ -339,6 +406,13 @@ function BatchViewPage() {
   // Ref to track if we should listen for events
   const unlistenRef = useRef<(() => void) | null>(null);
 
+  // Pending summary files per channelDir, flushed into CEREBRO.md once per batch.
+  const pendingBrainRef = useRef<Map<string, string[]>>(new Map());
+  // In-flight export+summarize promises; awaited before flushing the brain.
+  const inflightExportsRef = useRef<Promise<unknown>[]>([]);
+  const [brainFlushing, setBrainFlushing] = useState(false);
+  const [brainFlushMsg, setBrainFlushMsg] = useState<string | null>(null);
+
   // Load data
   const loadData = useCallback(async () => {
     const [ch, b] = await Promise.all([
@@ -368,11 +442,62 @@ function BatchViewPage() {
     try {
       await updateVideoTranscription(videoId, { full_text: text, transcription_method: method, language });
       await recalcBatchCounts(batchId);
+      // Fire-and-forget: export + summarize runs in parallel with next video's transcription.
+      // The resulting summary path is buffered in pendingBrainRef; the batch flush at
+      // batch_done / batch_pausado / batch_cancelado integrates them all in one Claude call.
+      const p = exportAndSummarizeVideo(channelId, videoId, text, method, language)
+        .then((res) => {
+          if (!res) return;
+          const existing = pendingBrainRef.current.get(res.channelDir) ?? [];
+          pendingBrainRef.current.set(res.channelDir, existing.concat(res.filePaths));
+        })
+        .catch((err) => console.error("Export+summarize failed for", videoId, err));
+      inflightExportsRef.current.push(p);
       await loadData();
     } catch (err) {
       console.error("Failed to persist video transcription:", err);
     }
-  }, [batchId, loadData]);
+  }, [batchId, channelId, loadData]);
+
+  // Wait for pending export+summarize tasks, then integrate all buffered summaries
+  // into CEREBRO.md in chunks (one Claude call per chunk, sequential, stop-on-failure).
+  const flushPendingBrain = useCallback(async () => {
+    const inflight = inflightExportsRef.current;
+    inflightExportsRef.current = [];
+    if (inflight.length > 0) {
+      await Promise.allSettled(inflight);
+    }
+    const entries = Array.from(pendingBrainRef.current.entries());
+    pendingBrainRef.current.clear();
+    if (entries.length === 0) return;
+
+    setBrainFlushing(true);
+    setBrainFlushMsg(null);
+    try {
+      for (const [channelDir, files] of entries) {
+        if (files.length === 0) continue;
+        const run = await updateChannelBrainChunked(channelDir, files, {
+          onProgress: (msg) => setBrainFlushMsg(msg),
+        });
+        if (run.failedChunk) {
+          setBrainFlushMsg(
+            `Brain chunk ${run.failedChunk.index}/${run.chunksTotal} failed ` +
+            `(${run.failedChunk.size} files). ${run.chunksCompleted} chunk(s) ` +
+            `integrated, ${run.filesIntegrated} file(s) merged. Remaining chunks skipped.`
+          );
+          console.error("Brain chunk failed", run.failedChunk, "for", channelDir);
+          break;
+        }
+        setBrainFlushMsg(
+          `Brain updated: ${run.chunksCompleted}/${run.chunksTotal} chunk(s), ` +
+          `${run.filesIntegrated}/${run.filesAttempted} file(s) integrated ` +
+          `in ${(run.durationMs / 1000).toFixed(1)}s.`
+        );
+      }
+    } finally {
+      setBrainFlushing(false);
+    }
+  }, []);
 
   const persistVideoError = useCallback(async (videoId: string, message: string) => {
     try {
@@ -443,6 +568,10 @@ function BatchViewPage() {
             setProcessing(false);
             setCurrentVideoId(null);
             setProgressMsg("");
+            // Flush buffered summaries into CEREBRO.md once (single Claude call).
+            // Runs independently of the reload below so the UI reflects completion
+            // immediately while the brain integrates in the background.
+            flushPendingBrain();
             loadData();
             break;
         }
@@ -461,7 +590,7 @@ function BatchViewPage() {
       cancelled = true;
       unlistenRef.current?.();
     };
-  }, [batchId, loadData]);
+  }, [batchId, loadData, flushPendingBrain]);
 
   // ---------- Actions ----------
 
@@ -671,6 +800,11 @@ function BatchViewPage() {
               <p className="text-xs text-muted-foreground mt-0.5">
                 {batch.completed_videos} completed, {batch.failed_videos} failed of {batch.total_videos}
               </p>
+              {(brainFlushing || brainFlushMsg) && (
+                <p className="text-xs text-primary mt-1">
+                  {brainFlushMsg ?? "Integrating summaries into CEREBRO.md (chunked)…"}
+                </p>
+              )}
             </div>
           </div>
 

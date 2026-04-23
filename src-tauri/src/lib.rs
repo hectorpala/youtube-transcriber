@@ -1,5 +1,7 @@
 use std::collections::HashMap;
-use std::io::BufRead;
+use std::fs::OpenOptions;
+use std::io::{BufRead, Write};
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command as StdCommand, Stdio};
 use std::sync::{Arc, Mutex};
 use tauri::Emitter;
@@ -114,6 +116,682 @@ struct BatchProcessResult {
     completed: u32,
     failed: u32,
     status: String,
+}
+
+// ---------- Resolve channel from any YouTube URL ----------
+
+#[derive(serde::Deserialize, Debug)]
+#[serde(tag = "type")]
+enum ResolveOutput {
+    #[serde(rename = "result")]
+    Result {
+        channel_id: String,
+        channel_name: String,
+        channel_url: String,
+        handle: Option<String>,
+    },
+    #[serde(rename = "error")]
+    Error { message: String },
+}
+
+#[derive(serde::Serialize)]
+struct ResolvedChannel {
+    channel_id: String,
+    channel_name: String,
+    channel_url: String,
+    handle: Option<String>,
+}
+
+#[tauri::command]
+async fn resolve_channel(
+    app: tauri::AppHandle,
+    url: String,
+) -> Result<ResolvedChannel, String> {
+    let scripts_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Cannot resolve resource dir: {e}"))?;
+    let script_path = scripts_dir.join("_up_/scripts/resolve_channel.py");
+
+    if !script_path.exists() {
+        return Err(format!(
+            "Resolve script not found at {}",
+            script_path.display()
+        ));
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = StdCommand::new("python3")
+            .arg(&script_path)
+            .arg(&url)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| format!("Failed to start resolve script: {e}"))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<ResolveOutput>(line) {
+                Ok(ResolveOutput::Result {
+                    channel_id,
+                    channel_name,
+                    channel_url,
+                    handle,
+                }) => {
+                    return Ok(ResolvedChannel {
+                        channel_id,
+                        channel_name,
+                        channel_url,
+                        handle,
+                    });
+                }
+                Ok(ResolveOutput::Error { message }) => {
+                    return Err(message);
+                }
+                Err(_) => continue,
+            }
+        }
+
+        Err("No valid output from resolve script".into())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {e}"))?
+}
+
+// ---------- Resolve video info from URL ----------
+
+#[derive(serde::Deserialize, Debug)]
+#[serde(tag = "type")]
+enum ResolveVideoOutput {
+    #[serde(rename = "result")]
+    Result {
+        video_id: String,
+        title: String,
+        channel_id: String,
+        channel_name: String,
+        channel_url: String,
+        handle: Option<String>,
+        thumbnail: Option<String>,
+        duration: Option<i64>,
+        published_at: Option<String>,
+    },
+    #[serde(rename = "error")]
+    Error { message: String },
+}
+
+#[derive(serde::Serialize)]
+struct ResolvedVideo {
+    video_id: String,
+    title: String,
+    channel_id: String,
+    channel_name: String,
+    channel_url: String,
+    handle: Option<String>,
+    thumbnail: Option<String>,
+    duration: Option<i64>,
+    published_at: Option<String>,
+}
+
+#[tauri::command]
+async fn resolve_video(
+    app: tauri::AppHandle,
+    url: String,
+) -> Result<ResolvedVideo, String> {
+    let scripts_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Cannot resolve resource dir: {e}"))?;
+    let script_path = scripts_dir.join("_up_/scripts/resolve_video.py");
+
+    if !script_path.exists() {
+        return Err(format!(
+            "Resolve video script not found at {}",
+            script_path.display()
+        ));
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = StdCommand::new("python3")
+            .arg(&script_path)
+            .arg(&url)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .map_err(|e| format!("Failed to start resolve_video script: {e}"))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            match serde_json::from_str::<ResolveVideoOutput>(line) {
+                Ok(ResolveVideoOutput::Result {
+                    video_id,
+                    title,
+                    channel_id,
+                    channel_name,
+                    channel_url,
+                    handle,
+                    thumbnail,
+                    duration,
+                    published_at,
+                }) => {
+                    return Ok(ResolvedVideo {
+                        video_id,
+                        title,
+                        channel_id,
+                        channel_name,
+                        channel_url,
+                        handle,
+                        thumbnail,
+                        duration,
+                        published_at,
+                    });
+                }
+                Ok(ResolveVideoOutput::Error { message }) => {
+                    return Err(message);
+                }
+                Err(_) => continue,
+            }
+        }
+
+        Err("No valid output from resolve_video script".into())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {e}"))?
+}
+
+// ---------- Summarize video command ----------
+
+#[derive(serde::Deserialize, Debug)]
+#[serde(tag = "type")]
+enum SummarizeOutput {
+    #[serde(rename = "progress")]
+    Progress { message: String },
+    #[serde(rename = "result")]
+    Result {
+        summary_chars: u64,
+        file: String,
+        #[serde(default)]
+        skipped: bool,
+    },
+    #[serde(rename = "error")]
+    Error { message: String },
+}
+
+#[derive(serde::Serialize)]
+struct SummarizeResult {
+    summary_chars: u64,
+    file: String,
+    skipped: bool,
+}
+
+#[tauri::command]
+async fn summarize_video(
+    app: tauri::AppHandle,
+    file_path: String,
+) -> Result<SummarizeResult, String> {
+    let scripts_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Cannot resolve resource dir: {e}"))?;
+    let script_path = scripts_dir.join("_up_/scripts/summarize.py");
+
+    if !script_path.exists() {
+        return Err(format!("Summarize script not found at {}", script_path.display()));
+    }
+
+    let app_handle = app.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut child = StdCommand::new("python3")
+            .arg(&script_path)
+            .arg(&file_path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to start summarize script: {e}"))?;
+
+        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let reader = std::io::BufReader::new(stdout);
+
+        let mut final_result: Option<SummarizeResult> = None;
+
+        for line in reader.lines() {
+            let line = line.map_err(|e| format!("Read error: {e}"))?;
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            match serde_json::from_str::<SummarizeOutput>(&line) {
+                Ok(SummarizeOutput::Progress { message }) => {
+                    let _ = app_handle.emit(
+                        "summarize-progress",
+                        ScrapeProgress {
+                            msg_type: "progress".into(),
+                            message,
+                        },
+                    );
+                }
+                Ok(SummarizeOutput::Result { summary_chars, file, skipped }) => {
+                    final_result = Some(SummarizeResult { summary_chars, file, skipped });
+                }
+                Ok(SummarizeOutput::Error { message }) => {
+                    let _ = child.wait();
+                    return Err(message);
+                }
+                Err(_) => continue,
+            }
+        }
+
+        let _ = child.wait();
+        final_result.ok_or_else(|| "No result from summarize script".into())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {e}"))?
+}
+
+// ---------- Update channel brain command ----------
+
+#[derive(serde::Deserialize, Debug)]
+#[serde(tag = "type")]
+enum UpdateBrainOutput {
+    #[serde(rename = "progress")]
+    Progress { message: String },
+    #[serde(rename = "result")]
+    Result {
+        brain_file: String,
+        action: String,
+    },
+    #[serde(rename = "error")]
+    Error { message: String },
+}
+
+#[derive(serde::Serialize)]
+struct UpdateBrainResult {
+    brain_file: String,
+    action: String,
+}
+
+#[tauri::command]
+async fn update_channel_brain(
+    app: tauri::AppHandle,
+    channel_dir: String,
+    summary_file: String,
+) -> Result<UpdateBrainResult, String> {
+    let scripts_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Cannot resolve resource dir: {e}"))?;
+    let script_path = scripts_dir.join("_up_/scripts/update_brain.py");
+
+    if !script_path.exists() {
+        return Err(format!("Brain update script not found at {}", script_path.display()));
+    }
+
+    let app_handle = app.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut child = StdCommand::new("python3")
+            .arg(&script_path)
+            .arg(&channel_dir)
+            .arg(&summary_file)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to start brain script: {e}"))?;
+
+        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let reader = std::io::BufReader::new(stdout);
+
+        let mut final_result: Option<UpdateBrainResult> = None;
+
+        for line in reader.lines() {
+            let line = line.map_err(|e| format!("Read error: {e}"))?;
+            if line.trim().is_empty() { continue; }
+
+            match serde_json::from_str::<UpdateBrainOutput>(&line) {
+                Ok(UpdateBrainOutput::Progress { message }) => {
+                    let _ = app_handle.emit(
+                        "brain-progress",
+                        ScrapeProgress { msg_type: "progress".into(), message },
+                    );
+                }
+                Ok(UpdateBrainOutput::Result { brain_file, action }) => {
+                    final_result = Some(UpdateBrainResult { brain_file, action });
+                }
+                Ok(UpdateBrainOutput::Error { message }) => {
+                    let _ = child.wait();
+                    return Err(message);
+                }
+                Err(_) => continue,
+            }
+        }
+
+        let _ = child.wait();
+        final_result.ok_or_else(|| "No result from brain script".into())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {e}"))?
+}
+
+// ---------- Update channel brain (BATCH) command ----------
+
+#[derive(serde::Deserialize, Debug)]
+#[serde(tag = "type")]
+enum UpdateBrainBatchOutput {
+    #[serde(rename = "progress")]
+    Progress { message: String },
+    #[serde(rename = "result")]
+    Result {
+        brain_file: String,
+        action: String,
+        #[serde(default)]
+        total_files: u64,
+        #[serde(default)]
+        processed_files: u64,
+        #[serde(default)]
+        skipped_files: u64,
+        #[serde(default)]
+        total_summary_chars: u64,
+        #[serde(default)]
+        cerebro_bytes_before: u64,
+        #[serde(default)]
+        cerebro_bytes_after: u64,
+        #[serde(default)]
+        delta_bytes: i64,
+        #[serde(default)]
+        claude_ms: f64,
+        #[serde(default)]
+        duration_ms: f64,
+    },
+    #[serde(rename = "error")]
+    Error { message: String },
+}
+
+#[derive(serde::Serialize)]
+struct UpdateBrainBatchResult {
+    brain_file: String,
+    action: String,
+    total_files: u64,
+    processed_files: u64,
+    skipped_files: u64,
+    total_summary_chars: u64,
+    cerebro_bytes_before: u64,
+    cerebro_bytes_after: u64,
+    delta_bytes: i64,
+    claude_ms: f64,
+    duration_ms: f64,
+}
+
+#[tauri::command]
+async fn update_channel_brain_batch(
+    app: tauri::AppHandle,
+    channel_dir: String,
+    summary_files: Vec<String>,
+) -> Result<UpdateBrainBatchResult, String> {
+    if summary_files.is_empty() {
+        return Err("summary_files is empty".into());
+    }
+
+    let scripts_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Cannot resolve resource dir: {e}"))?;
+    let script_path = scripts_dir.join("_up_/scripts/update_brain_batch.py");
+
+    if !script_path.exists() {
+        return Err(format!(
+            "Brain batch script not found at {}",
+            script_path.display()
+        ));
+    }
+
+    let app_handle = app.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = StdCommand::new("python3");
+        cmd.arg(&script_path).arg(&channel_dir);
+        for f in &summary_files {
+            cmd.arg(f);
+        }
+        let mut child = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to start brain batch script: {e}"))?;
+
+        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let reader = std::io::BufReader::new(stdout);
+
+        let mut final_result: Option<UpdateBrainBatchResult> = None;
+
+        for line in reader.lines() {
+            let line = line.map_err(|e| format!("Read error: {e}"))?;
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            match serde_json::from_str::<UpdateBrainBatchOutput>(&line) {
+                Ok(UpdateBrainBatchOutput::Progress { message }) => {
+                    let _ = app_handle.emit(
+                        "brain-batch-progress",
+                        ScrapeProgress {
+                            msg_type: "progress".into(),
+                            message,
+                        },
+                    );
+                }
+                Ok(UpdateBrainBatchOutput::Result {
+                    brain_file,
+                    action,
+                    total_files,
+                    processed_files,
+                    skipped_files,
+                    total_summary_chars,
+                    cerebro_bytes_before,
+                    cerebro_bytes_after,
+                    delta_bytes,
+                    claude_ms,
+                    duration_ms,
+                }) => {
+                    final_result = Some(UpdateBrainBatchResult {
+                        brain_file,
+                        action,
+                        total_files,
+                        processed_files,
+                        skipped_files,
+                        total_summary_chars,
+                        cerebro_bytes_before,
+                        cerebro_bytes_after,
+                        delta_bytes,
+                        claude_ms,
+                        duration_ms,
+                    });
+                }
+                Ok(UpdateBrainBatchOutput::Error { message }) => {
+                    let _ = child.wait();
+                    return Err(message);
+                }
+                Err(_) => continue,
+            }
+        }
+
+        let _ = child.wait();
+        final_result.ok_or_else(|| "No result from brain batch script".into())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {e}"))?
+}
+
+// ---------- Update channel brain (DELTA) command ----------
+
+#[derive(serde::Deserialize, Debug)]
+#[serde(tag = "type")]
+enum UpdateBrainDeltaOutput {
+    #[serde(rename = "progress")]
+    Progress { message: String },
+    #[serde(rename = "result")]
+    Result {
+        brain_file: String,
+        action: String,
+        #[serde(default)]
+        total_files: u64,
+        #[serde(default)]
+        processed_files: u64,
+        #[serde(default)]
+        skipped_files: u64,
+        #[serde(default)]
+        cerebro_bytes_before: u64,
+        #[serde(default)]
+        cerebro_bytes_after: u64,
+        #[serde(default)]
+        delta_bytes: i64,
+        #[serde(default)]
+        prompt_bytes: u64,
+        #[serde(default)]
+        response_bytes: u64,
+        #[serde(default)]
+        claude_ms: f64,
+        #[serde(default)]
+        apply_ms: f64,
+        #[serde(default)]
+        duration_ms: f64,
+        #[serde(default)]
+        apply_report: Option<serde_json::Value>,
+    },
+    #[serde(rename = "error")]
+    Error { message: String },
+}
+
+#[derive(serde::Serialize)]
+struct UpdateBrainDeltaResult {
+    brain_file: String,
+    action: String,
+    total_files: u64,
+    processed_files: u64,
+    skipped_files: u64,
+    cerebro_bytes_before: u64,
+    cerebro_bytes_after: u64,
+    delta_bytes: i64,
+    prompt_bytes: u64,
+    response_bytes: u64,
+    claude_ms: f64,
+    apply_ms: f64,
+    duration_ms: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    apply_report: Option<serde_json::Value>,
+}
+
+#[tauri::command]
+async fn update_channel_brain_delta(
+    app: tauri::AppHandle,
+    channel_dir: String,
+    summary_files: Vec<String>,
+) -> Result<UpdateBrainDeltaResult, String> {
+    if summary_files.is_empty() {
+        return Err("summary_files is empty".into());
+    }
+
+    let scripts_dir = app
+        .path()
+        .resource_dir()
+        .map_err(|e| format!("Cannot resolve resource dir: {e}"))?;
+    let script_path = scripts_dir.join("_up_/scripts/update_brain_delta.py");
+
+    if !script_path.exists() {
+        return Err(format!(
+            "Brain delta script not found at {}",
+            script_path.display()
+        ));
+    }
+
+    let app_handle = app.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut cmd = StdCommand::new("python3");
+        cmd.arg(&script_path).arg(&channel_dir);
+        for f in &summary_files {
+            cmd.arg(f);
+        }
+        let mut child = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to start brain delta script: {e}"))?;
+
+        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let reader = std::io::BufReader::new(stdout);
+
+        let mut final_result: Option<UpdateBrainDeltaResult> = None;
+
+        for line in reader.lines() {
+            let line = line.map_err(|e| format!("Read error: {e}"))?;
+            if line.trim().is_empty() {
+                continue;
+            }
+
+            match serde_json::from_str::<UpdateBrainDeltaOutput>(&line) {
+                Ok(UpdateBrainDeltaOutput::Progress { message }) => {
+                    let _ = app_handle.emit(
+                        "brain-delta-progress",
+                        ScrapeProgress {
+                            msg_type: "progress".into(),
+                            message,
+                        },
+                    );
+                }
+                Ok(UpdateBrainDeltaOutput::Result {
+                    brain_file,
+                    action,
+                    total_files,
+                    processed_files,
+                    skipped_files,
+                    cerebro_bytes_before,
+                    cerebro_bytes_after,
+                    delta_bytes,
+                    prompt_bytes,
+                    response_bytes,
+                    claude_ms,
+                    apply_ms,
+                    duration_ms,
+                    apply_report,
+                }) => {
+                    final_result = Some(UpdateBrainDeltaResult {
+                        brain_file,
+                        action,
+                        total_files,
+                        processed_files,
+                        skipped_files,
+                        cerebro_bytes_before,
+                        cerebro_bytes_after,
+                        delta_bytes,
+                        prompt_bytes,
+                        response_bytes,
+                        claude_ms,
+                        apply_ms,
+                        duration_ms,
+                        apply_report,
+                    });
+                }
+                Ok(UpdateBrainDeltaOutput::Error { message }) => {
+                    let _ = child.wait();
+                    return Err(message);
+                }
+                Err(_) => continue,
+            }
+        }
+
+        let _ = child.wait();
+        final_result.ok_or_else(|| "No result from brain delta script".into())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {e}"))?
 }
 
 // ---------- Scrape channel command ----------
@@ -265,7 +943,7 @@ async fn process_batch(
         lock.signals.remove(&batch_id);
     }
 
-    let model = model.unwrap_or_else(|| "base".into());
+    let model = model.unwrap_or_else(|| "small".into());
     let language = language;
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -520,7 +1198,7 @@ async fn transcribe_single(
         return Err("Transcribe script not found".into());
     }
 
-    let model = model.unwrap_or_else(|| "base".into());
+    let model = model.unwrap_or_else(|| "small".into());
     let app_handle = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -619,6 +1297,7 @@ struct ExportResult {
     exported: u32,
     skipped: u32,
     output_dir: String,
+    exported_files: Vec<String>,
 }
 
 fn slugify(s: &str) -> String {
@@ -660,6 +1339,7 @@ async fn export_channel(request: ExportRequest) -> Result<ExportResult, String> 
 
     let mut exported: u32 = 0;
     let mut skipped: u32 = 0;
+    let mut exported_files: Vec<String> = Vec::new();
 
     for video in &request.videos {
         let date_prefix = video.published_at.as_deref().unwrap_or("unknown-date");
@@ -727,13 +1407,114 @@ tags: "{tags}"
             .map_err(|e| format!("Failed to write {}: {e}", filename))?;
 
         exported += 1;
+        exported_files.push(filepath.to_string_lossy().to_string());
     }
 
     Ok(ExportResult {
         exported,
         skipped,
         output_dir: channel_dir.to_string_lossy().to_string(),
+        exported_files,
     })
+}
+
+// ---------- Brain metrics telemetry ----------
+//
+// Single JSONL log, one line per chunk outcome. The caller (TS helper) already
+// has the structured line; we only resolve the path, create the dir, and append.
+//
+// Path (macOS): ~/Library/Caches/youtube-transcriber/brain-metrics.jsonl
+// On other platforms we fall back to $XDG_CACHE_HOME/youtube-transcriber/ (or
+// $HOME/.cache/youtube-transcriber/ as a last resort). The app only targets
+// macOS today; the fallbacks exist only so tests/dev on Linux don't crash.
+//
+// On any I/O failure the command returns Err and the TS side swallows it with
+// console.warn — telemetry must never break the brain-update flow.
+
+fn brain_metrics_dir() -> Result<PathBuf, String> {
+    if cfg!(target_os = "macos") {
+        let home = std::env::var("HOME").map_err(|e| format!("HOME not set: {e}"))?;
+        return Ok(PathBuf::from(home).join("Library").join("Caches").join("youtube-transcriber"));
+    }
+    if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
+        if !xdg.is_empty() {
+            return Ok(PathBuf::from(xdg).join("youtube-transcriber"));
+        }
+    }
+    let home = std::env::var("HOME").map_err(|e| format!("HOME not set: {e}"))?;
+    Ok(PathBuf::from(home).join(".cache").join("youtube-transcriber"))
+}
+
+fn brain_metrics_path() -> Result<PathBuf, String> {
+    let dir = brain_metrics_dir()?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    Ok(dir.join("brain-metrics.jsonl"))
+}
+
+/// Pure append helper — isolated from Tauri state so it can be unit-tested.
+/// Appends exactly one newline-terminated record. Does not validate JSON
+/// shape; the caller owns the schema.
+fn append_metric_line(path: &Path, line: &str) -> std::io::Result<()> {
+    let mut f = OpenOptions::new().create(true).append(true).open(path)?;
+    let needs_nl = !line.ends_with('\n');
+    f.write_all(line.as_bytes())?;
+    if needs_nl {
+        f.write_all(b"\n")?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn record_brain_metric(line: String) -> Result<(), String> {
+    let path = brain_metrics_path()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        append_metric_line(&path, &line)
+            .map_err(|e| format!("write {}: {e}", path.display()))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {e}"))?
+}
+
+#[cfg(test)]
+mod brain_metrics_tests {
+    use super::append_metric_line;
+    use std::fs;
+    use std::io::Read;
+
+    #[test]
+    fn appends_lines_and_terminates_with_newline() {
+        let tmp = std::env::temp_dir().join(format!(
+            "yt-brain-metrics-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&tmp);
+
+        append_metric_line(&tmp, r#"{"a":1}"#).unwrap();
+        append_metric_line(&tmp, r#"{"b":2}"#).unwrap();
+        // Pre-terminated line should not get double-newline.
+        append_metric_line(&tmp, "{\"c\":3}\n").unwrap();
+
+        let mut s = String::new();
+        fs::File::open(&tmp).unwrap().read_to_string(&mut s).unwrap();
+        assert_eq!(s, "{\"a\":1}\n{\"b\":2}\n{\"c\":3}\n");
+
+        let _ = fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn creates_file_on_first_write() {
+        let tmp = std::env::temp_dir().join(format!(
+            "yt-brain-metrics-new-{}.jsonl",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&tmp);
+        assert!(!tmp.exists());
+
+        append_metric_line(&tmp, r#"{"hello":"world"}"#).unwrap();
+        assert!(tmp.exists());
+
+        let _ = fs::remove_file(&tmp);
+    }
 }
 
 // ---------- App entry ----------
@@ -808,10 +1589,22 @@ pub fn run() {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "add settings table for app preferences",
+            sql: r#"
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+            "#,
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
@@ -822,6 +1615,13 @@ pub fn run() {
             BatchProcessorState::default(),
         ))))
         .invoke_handler(tauri::generate_handler![
+            resolve_channel,
+            resolve_video,
+            summarize_video,
+            update_channel_brain,
+            update_channel_brain_batch,
+            update_channel_brain_delta,
+            record_brain_metric,
             scrape_channel,
             process_batch,
             signal_batch,

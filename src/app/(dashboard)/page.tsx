@@ -25,12 +25,21 @@ import {
   type ChannelProgress,
   type GlobalStats,
   addVideoBulk,
+  addVideo,
   updateChannel,
   deleteChannel,
   getGlobalStats,
   getAllChannelProgress,
   getPausedOrActiveBatches,
+  findChannelByUrlOrId,
+  updateVideoStatus,
+  updateVideoTranscription,
+  getSetting,
 } from "@/lib/db";
+import { updateChannelBrainChunked } from "@/lib/brain-batch";
+
+const EXPORT_DIR_KEY = "export_dir";
+const DEFAULT_EXPORT_DIR = "/Users/openclaw/Documents/trading-knowledge";
 import {
   Plus,
   ScanSearch,
@@ -77,12 +86,21 @@ function formatHours(seconds: number): string {
 
 // ---------- Add channel form ----------
 
-function extractChannelInfo(input: string): {
-  id: string;
-  name: string;
-  handle: string | null;
-  url: string;
-} {
+type ChannelInfo = { id: string; name: string; handle: string | null; url: string };
+
+function isVideoUrl(input: string): boolean {
+  try {
+    const url = new URL(input.trim());
+    const host = url.hostname.replace("www.", "");
+    if (host === "youtube.com" && url.pathname === "/watch" && url.searchParams.has("v")) return true;
+    if (host === "youtu.be") return true;
+    if (host === "youtube.com" && url.pathname.startsWith("/shorts/")) return true;
+    if (host === "youtube.com" && url.pathname.startsWith("/live/")) return true;
+  } catch { /* not a URL */ }
+  return false;
+}
+
+function extractChannelInfo(input: string): ChannelInfo {
   const trimmed = input.trim();
 
   if (trimmed.startsWith("@")) {
@@ -116,47 +134,250 @@ function extractChannelInfo(input: string): {
   return { id: trimmed, name: trimmed, handle: null, url: `https://www.youtube.com/@${trimmed}` };
 }
 
+async function resolveChannelFromVideo(videoUrl: string): Promise<ChannelInfo> {
+  const result = await invoke<{
+    channel_id: string;
+    channel_name: string;
+    channel_url: string;
+    handle: string | null;
+  }>("resolve_channel", { url: videoUrl });
+
+  return {
+    id: result.handle ? result.handle.slice(1) : result.channel_id,
+    name: result.channel_name,
+    handle: result.handle,
+    url: result.channel_url,
+  };
+}
+
+interface ResolvedVideo {
+  video_id: string;
+  title: string;
+  channel_id: string;
+  channel_name: string;
+  channel_url: string;
+  handle: string | null;
+  thumbnail: string | null;
+  duration: number | null;
+  published_at: string | null;
+}
+
+type FormState =
+  | { step: "idle" }
+  | { step: "resolving" }
+  | { step: "confirm_new_channel"; video: ResolvedVideo }
+  | { step: "transcribing"; video: ResolvedVideo; channel: Channel }
+  | { step: "done"; message: string }
+  | { step: "error"; message: string };
+
 function AddChannelForm({ onAdd }: { onAdd: () => void }) {
   const [value, setValue] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formState, setFormState] = useState<FormState>({ step: "idle" });
   const { add } = useChannels();
+
+  const busy = formState.step === "resolving" || formState.step === "transcribing";
+
+  const addVideoAndTranscribe = useCallback(async (video: ResolvedVideo, channel: Channel) => {
+    setFormState({ step: "transcribing", video, channel });
+
+    const videoUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
+
+    // Insert video into DB (or skip if it already exists)
+    const inserted = await addVideo({
+      id: video.video_id,
+      channel_id: channel.id,
+      title: video.title,
+      url: videoUrl,
+      thumbnail: video.thumbnail,
+      duration: video.duration,
+      published_at: video.published_at,
+      status: "transcribiendo",
+    });
+    if (!inserted) {
+      await updateVideoStatus(video.video_id, "transcribiendo");
+    }
+
+    try {
+      const result = await invoke<{
+        video_id: string;
+        event_type: string;
+        message: string;
+        text?: string;
+        language?: string;
+        method?: string;
+      }>("transcribe_single", {
+        videoId: video.video_id,
+        videoUrl: videoUrl,
+      });
+
+      if (result.text && result.language && result.method) {
+        await updateVideoTranscription(video.video_id, {
+          full_text: result.text,
+          transcription_method: result.method,
+          language: result.language,
+        });
+        // Auto-export + summarize
+        try {
+          const dir = (await getSetting(EXPORT_DIR_KEY)) ?? DEFAULT_EXPORT_DIR;
+          const exportRes = await invoke<{ exported_files: string[]; output_dir: string }>("export_channel", {
+            request: {
+              channel_name: channel.name,
+              channel_handle: channel.handle,
+              channel_url: channel.url,
+              output_dir: dir,
+              videos: [{
+                id: video.video_id,
+                title: video.title,
+                url: videoUrl,
+                duration: video.duration,
+                published_at: video.published_at,
+                language: result.language,
+                transcription_method: result.method,
+                full_text: result.text,
+                tags: null,
+              }],
+            },
+          });
+          const summarized: string[] = [];
+          for (const filePath of exportRes.exported_files) {
+            try {
+              await invoke("summarize_video", { filePath });
+              summarized.push(filePath);
+            } catch (sumErr) {
+              console.error("Summary failed:", sumErr);
+            }
+          }
+          if (summarized.length > 0) {
+            const run = await updateChannelBrainChunked(exportRes.output_dir, summarized);
+            if (run.failedChunk) {
+              console.error("Brain chunk failed:", run.failedChunk);
+            }
+          }
+        } catch (exportErr) {
+          console.error("Auto-export failed:", exportErr);
+        }
+        setFormState({ step: "done", message: `"${video.title}" transcribed, exported & summarized (${channel.name})` });
+      } else {
+        setFormState({ step: "done", message: `"${video.title}" added to ${channel.name}` });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await updateVideoStatus(video.video_id, "error", msg);
+      throw err;
+    }
+    onAdd();
+  }, [onAdd]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!value.trim() || adding) return;
+    if (!value.trim() || busy) return;
 
-    setAdding(true);
-    setFormError(null);
-    try {
-      const info = extractChannelInfo(value);
-      await add({ id: info.id, name: info.name, handle: info.handle, url: info.url });
-      setValue("");
-      onAdd();
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Failed to add channel");
-    } finally {
-      setAdding(false);
+    if (isVideoUrl(value)) {
+      // --- Video URL flow ---
+      setFormState({ step: "resolving" });
+      try {
+        const resolved = await invoke<ResolvedVideo>("resolve_video", { url: value.trim() });
+
+        // Check if channel already exists
+        const existing = await findChannelByUrlOrId(resolved.channel_id, resolved.handle, resolved.channel_name);
+        if (existing) {
+          await addVideoAndTranscribe(resolved, existing);
+        } else {
+          // Channel doesn't exist — ask user
+          setFormState({ step: "confirm_new_channel", video: resolved });
+        }
+      } catch (err) {
+        setFormState({ step: "error", message: err instanceof Error ? err.message : String(err) });
+      }
+    } else {
+      // --- Channel URL flow (original) ---
+      setFormState({ step: "resolving" });
+      try {
+        let info: ChannelInfo;
+        if (value.trim().startsWith("@") || !isVideoUrl(value)) {
+          info = extractChannelInfo(value);
+        } else {
+          info = await resolveChannelFromVideo(value.trim());
+        }
+        await add({ id: info.id, name: info.name, handle: info.handle, url: info.url });
+        setValue("");
+        setFormState({ step: "idle" });
+        onAdd();
+      } catch (err) {
+        setFormState({ step: "error", message: err instanceof Error ? err.message : String(err) });
+      }
     }
   };
 
+  const handleAddChannelAndTranscribe = useCallback(async () => {
+    if (formState.step !== "confirm_new_channel") return;
+    const { video } = formState;
+
+    try {
+      const channelId = video.handle ? video.handle.replace(/^@/, "") : video.channel_id;
+      await add({
+        id: channelId,
+        name: video.channel_name,
+        handle: video.handle,
+        url: video.channel_url,
+      });
+
+      const channel = await findChannelByUrlOrId(video.channel_id, video.handle, video.channel_name);
+      if (!channel) throw new Error("Failed to find channel after adding");
+
+      await addVideoAndTranscribe(video, channel);
+      setValue("");
+    } catch (err) {
+      setFormState({ step: "error", message: err instanceof Error ? err.message : String(err) });
+    }
+  }, [formState, add, addVideoAndTranscribe]);
+
+  const handleDismiss = useCallback(() => {
+    setFormState({ step: "idle" });
+  }, []);
+
   return (
-    <div>
+    <div className="space-y-2">
       <form onSubmit={handleSubmit} className="flex gap-2">
         <Input
           value={value}
-          onChange={(e) => { setValue(e.target.value); setFormError(null); }}
-          placeholder="YouTube URL or @handle..."
+          onChange={(e) => { setValue(e.target.value); if (formState.step === "error" || formState.step === "done") setFormState({ step: "idle" }); }}
+          placeholder="Channel URL, @handle, or video link..."
           className="max-w-sm"
-          disabled={adding}
+          disabled={busy}
         />
-        <Button type="submit" disabled={adding || !value.trim()}>
-          {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          <span>Add Channel</span>
+        <Button type="submit" disabled={busy || !value.trim()}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          <span>{formState.step === "resolving" ? "Resolving..." : formState.step === "transcribing" ? "Transcribing..." : "Add"}</span>
         </Button>
       </form>
-      {formError && (
-        <p className="text-xs text-destructive mt-1.5">{formError}</p>
+
+      {formState.step === "confirm_new_channel" && (
+        <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-3">
+          <p className="text-sm mb-2">
+            Channel <strong>{formState.video.channel_name}</strong> is not registered yet.
+          </p>
+          <p className="text-xs text-muted-foreground mb-3">
+            Video: {formState.video.title}
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleAddChannelAndTranscribe}>
+              <Plus className="h-3.5 w-3.5" />
+              Add channel & transcribe
+            </Button>
+            <Button size="sm" variant="ghost" onClick={handleDismiss}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {formState.step === "error" && (
+        <p className="text-xs text-destructive">{formState.message}</p>
+      )}
+
+      {formState.step === "done" && (
+        <p className="text-xs text-profit">{formState.message}</p>
       )}
     </div>
   );

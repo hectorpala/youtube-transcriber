@@ -10,15 +10,33 @@ Outputs JSON lines:
 """
 
 import json
+import os
+import shutil
 import subprocess
 import sys
+
+YTDLP_SEARCH_PATHS = [
+    os.path.expanduser("~/.local/bin/yt-dlp"),
+    "/opt/homebrew/bin/yt-dlp",
+    "/usr/local/bin/yt-dlp",
+]
+
+
+def find_ytdlp() -> str:
+    found = shutil.which("yt-dlp")
+    if found:
+        return found
+    for p in YTDLP_SEARCH_PATHS:
+        if os.path.isfile(p) and os.access(p, os.X_OK):
+            return p
+    return "yt-dlp"
 
 
 def scrape_channel(channel_url: str):
     print(json.dumps({"type": "progress", "message": "Starting yt-dlp scan..."}), flush=True)
 
     cmd = [
-        "python3", "-m", "yt_dlp",
+        find_ytdlp(),
         "--flat-playlist",
         "--dump-json",
         "--no-warnings",

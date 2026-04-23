@@ -12,6 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useVideos } from "@/hooks/use-videos";
 import { useBatches } from "@/hooks/use-batches";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   type Channel,
   type Batch,
@@ -20,7 +21,12 @@ import {
   hasActiveBatch,
   createBatchWithVideos,
   getCompletedVideosWithText,
+  getSetting,
+  setSetting,
+  updateVideoStatus,
+  updateVideoTranscription,
 } from "@/lib/db";
+import { updateChannelBrainChunked } from "@/lib/brain-batch";
 import {
   ArrowLeft,
   Search,
@@ -36,14 +42,28 @@ import {
   AlertCircle,
   Loader2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   Download,
+  FolderOpen,
+  ExternalLink,
+  SkipForward,
+  RefreshCw,
+  X,
 } from "lucide-react";
 
 // ---------- Constants ----------
 
+const PAGE_SIZE = 50;
+
 type DurationFilter = "all" | "short" | "medium" | "long";
 type DateFilter = "all" | "30d" | "3m" | "6m" | "1y";
 type StatusFilter = "all" | "pendiente" | "en_cola" | "transcribiendo" | "completado" | "error" | "omitido";
+type SortField = "title" | "duration" | "date" | "status";
+type SortDir = "asc" | "desc";
 
 const DURATION_OPTIONS: { value: DurationFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -128,12 +148,16 @@ function FilterBar({
   duration, onDuration,
   date, onDate,
   status, onStatus,
+  onClear,
 }: {
   search: string; onSearch: (v: string) => void;
   duration: DurationFilter; onDuration: (v: DurationFilter) => void;
   date: DateFilter; onDate: (v: DateFilter) => void;
   status: StatusFilter; onStatus: (v: StatusFilter) => void;
+  onClear: () => void;
 }) {
+  const hasFilters = search !== "" || duration !== "all" || date !== "all" || status !== "all";
+
   return (
     <div className="flex flex-wrap items-center gap-3 mb-4">
       <div className="relative">
@@ -148,6 +172,12 @@ function FilterBar({
       <FilterSelect label="Duration" options={DURATION_OPTIONS} value={duration} onChange={onDuration} />
       <FilterSelect label="Date" options={DATE_OPTIONS} value={date} onChange={onDate} />
       <FilterSelect label="Status" options={STATUS_OPTIONS} value={status} onChange={onStatus} />
+      {hasFilters && (
+        <Button size="sm" variant="ghost" onClick={onClear} className="text-muted-foreground">
+          <X className="h-3.5 w-3.5" />
+          <span>Clear</span>
+        </Button>
+      )}
     </div>
   );
 }
@@ -196,10 +226,11 @@ function ChannelStats({ statusCounts, total }: { statusCounts: Record<string, nu
     { label: "Queued", value: queued, icon: Package },
     { label: "Completed", value: completed, icon: CheckCircle2 },
     { label: "Errors", value: errors, icon: AlertCircle },
+    { label: "Skipped", value: skipped, icon: SkipForward },
   ];
 
   return (
-    <div className="grid grid-cols-5 gap-3 mb-6">
+    <div className="grid grid-cols-6 gap-3 mb-6">
       {stats.map((s) => (
         <div key={s.label} className="flex items-center gap-2.5 rounded-lg border border-border bg-card p-3">
           <s.icon className="h-4 w-4 text-muted-foreground" />
@@ -213,6 +244,31 @@ function ChannelStats({ statusCounts, total }: { statusCounts: Record<string, nu
   );
 }
 
+// ---------- Sortable header ----------
+
+function SortableHeader({
+  field, label, current, dir, onSort, className,
+}: {
+  field: SortField; label: string; current: SortField; dir: SortDir;
+  onSort: (f: SortField) => void; className?: string;
+}) {
+  const active = current === field;
+  return (
+    <th className={`px-3 py-2 text-xs font-medium text-muted-foreground ${className ?? ""}`}>
+      <button
+        className="flex items-center gap-1 hover:text-foreground transition-colors"
+        onClick={() => onSort(field)}
+      >
+        <span>{label}</span>
+        {active
+          ? (dir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)
+          : <ArrowUpDown className="h-3 w-3 opacity-30" />
+        }
+      </button>
+    </th>
+  );
+}
+
 // ---------- Video row ----------
 
 function VideoRow({
@@ -220,13 +276,18 @@ function VideoRow({
   index,
   selected,
   onToggle,
+  onRetranscribe,
+  retranscribing,
 }: {
   video: Video;
   index: number;
   selected: boolean;
   onToggle: (id: string) => void;
+  onRetranscribe: (video: Video) => void;
+  retranscribing: boolean;
 }) {
   const badge = STATUS_BADGE[video.status] ?? { label: video.status, variant: "outline" as const };
+  const canRetranscribe = video.status === "completado" || video.status === "error" || video.status === "omitido";
 
   return (
     <tr
@@ -240,15 +301,47 @@ function VideoRow({
       </td>
       <td className="px-3 py-2.5 text-xs text-muted-foreground w-10 font-mono">{index + 1}</td>
       <td className="px-3 py-2.5 text-sm max-w-md">
-        <span className="line-clamp-1" title={video.title}>{video.title}</span>
+        <div className="flex items-center gap-1.5">
+          <span className="line-clamp-1 flex-1" title={video.title}>{video.title}</span>
+          <a
+            href={video.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-muted-foreground hover:text-foreground shrink-0"
+            title="Open in YouTube"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        </div>
       </td>
       <td className="px-3 py-2.5 text-xs text-muted-foreground font-mono w-20">{formatDuration(video.duration)}</td>
       <td className="px-3 py-2.5 text-xs text-muted-foreground w-28">{formatDate(video.published_at)}</td>
       <td className="px-3 py-2.5 w-28">
-        <Badge variant={badge.variant}>{badge.label}</Badge>
+        <div title={video.status === "error" && video.error_message ? video.error_message : undefined}>
+          <Badge variant={badge.variant}>{badge.label}</Badge>
+          {video.status === "error" && video.error_message && (
+            <p className="text-[9px] text-destructive mt-0.5 line-clamp-1">{video.error_message}</p>
+          )}
+        </div>
       </td>
       <td className="px-3 py-2.5 text-xs text-muted-foreground font-mono w-16">
         {video.batch_number != null ? `#${video.batch_number}` : "--"}
+      </td>
+      <td className="px-3 py-2.5 w-12">
+        {canRetranscribe && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onRetranscribe(video); }}
+            disabled={retranscribing}
+            className="text-muted-foreground hover:text-primary disabled:opacity-50"
+            title="Re-transcribe"
+          >
+            {retranscribing
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              : <RefreshCw className="h-3.5 w-3.5" />
+            }
+          </button>
+        )}
       </td>
     </tr>
   );
@@ -447,11 +540,34 @@ function BatchList({ channelId, batches }: { channelId: string; batches: Batch[]
 
 // ---------- Export button ----------
 
+const EXPORT_DIR_KEY = "export_dir";
+const DEFAULT_EXPORT_DIR = "/Users/openclaw/Documents/trading-knowledge";
+
 function ExportButton({ channelId, channel }: { channelId: string; channel: Channel }) {
   const [exporting, setExporting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [exportDir, setExportDir] = useState<string | null>(null);
+
+  useEffect(() => {
+    getSetting(EXPORT_DIR_KEY).then((val) => setExportDir(val ?? DEFAULT_EXPORT_DIR));
+  }, []);
+
+  const handleChangeDir = useCallback(async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Select export folder",
+      defaultPath: exportDir ?? DEFAULT_EXPORT_DIR,
+    });
+    if (selected) {
+      await setSetting(EXPORT_DIR_KEY, selected);
+      setExportDir(selected);
+      setResult(`Export folder: ${selected}`);
+    }
+  }, [exportDir]);
 
   const handleExport = useCallback(async () => {
+    const dir = exportDir ?? DEFAULT_EXPORT_DIR;
     setExporting(true);
     setResult(null);
     try {
@@ -461,15 +577,12 @@ function ExportButton({ channelId, channel }: { channelId: string; channel: Chan
         return;
       }
 
-      const homeDir = "/Users/openclaw/Documents";
-      const exportDir = `${homeDir}/trading-knowledge`;
-
       const res = await invoke<{ exported: number; skipped: number; output_dir: string }>("export_channel", {
         request: {
           channel_name: channel.name,
           channel_handle: channel.handle,
           channel_url: channel.url,
-          output_dir: exportDir,
+          output_dir: dir,
           videos: videos.map(v => ({
             id: v.id,
             title: v.title,
@@ -491,14 +604,24 @@ function ExportButton({ channelId, channel }: { channelId: string; channel: Chan
     } finally {
       setExporting(false);
     }
-  }, [channelId, channel]);
+  }, [channelId, channel, exportDir]);
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <Button size="sm" variant="outline" disabled={exporting} onClick={handleExport}>
-        {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-        <span>Export All</span>
-      </Button>
+      <div className="flex gap-1">
+        <Button size="sm" variant="ghost" onClick={handleChangeDir} title="Change export folder">
+          <FolderOpen className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="outline" disabled={exporting} onClick={handleExport}>
+          {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          <span>Export All</span>
+        </Button>
+      </div>
+      {exportDir && (
+        <p className="text-[10px] text-muted-foreground max-w-xs text-right truncate" title={exportDir}>
+          {exportDir}
+        </p>
+      )}
       {result && (
         <p className={`text-[10px] max-w-xs text-right ${result.startsWith("Error") ? "text-destructive" : "text-profit"}`}>
           {result}
@@ -516,8 +639,8 @@ export default function ChannelDetailPageWrapper() {
       <>
         <Skeleton className="h-7 w-48 mb-2" />
         <Skeleton className="h-4 w-64 mb-6" />
-        <div className="grid grid-cols-5 gap-3 mb-6">
-          {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
+        <div className="grid grid-cols-6 gap-3 mb-6">
+          {[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
         </div>
       </>
     }>
@@ -542,6 +665,13 @@ function ChannelDetailPage() {
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
+  // Sorting
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  // Pagination
+  const [page, setPage] = useState(0);
+
   // Selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -555,12 +685,12 @@ function ChannelDetailPage() {
     })();
   }, [channelId]);
 
-  // Filtered videos
+  // Filtered + sorted videos
   const filtered = useMemo(() => {
     const dateCutoff = getDateCutoff(dateFilter);
     const searchLower = search.toLowerCase();
 
-    return videos.filter((v) => {
+    const result = videos.filter((v) => {
       if (searchLower && !v.title.toLowerCase().includes(searchLower)) return false;
       if (!matchesDuration(v, durationFilter)) return false;
       if (statusFilter !== "all" && v.status !== statusFilter) return false;
@@ -569,7 +699,28 @@ function ChannelDetailPage() {
       }
       return true;
     });
-  }, [videos, search, durationFilter, dateFilter, statusFilter]);
+
+    result.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "title": cmp = a.title.localeCompare(b.title); break;
+        case "duration": cmp = (a.duration ?? 0) - (b.duration ?? 0); break;
+        case "date": cmp = (a.published_at ?? "").localeCompare(b.published_at ?? ""); break;
+        case "status": cmp = a.status.localeCompare(b.status); break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+    return result;
+  }, [videos, search, durationFilter, dateFilter, statusFilter, sortField, sortDir]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const paginatedVideos = filtered.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
+
+  // Reset page when filters change
+  useEffect(() => { setPage(0); }, [search, durationFilter, dateFilter, statusFilter]);
 
   // Selection helpers
   const allSelected = filtered.length > 0 && filtered.every((v) => selected.has(v.id));
@@ -604,6 +755,122 @@ function ChannelDetailPage() {
     await bulkSetStatus(ids, "pendiente");
     setSelected(new Set());
   }, [selected, bulkSetStatus]);
+
+  const [retranscribing, setRetranscribing] = useState<string | null>(null);
+  const [autoExportMsg, setAutoExportMsg] = useState<string | null>(null);
+
+  const autoExport = useCallback(async (video: Video, fullText: string, language: string | null, method: string | null) => {
+    if (!channel) return;
+    const dir = (await getSetting(EXPORT_DIR_KEY)) ?? DEFAULT_EXPORT_DIR;
+    try {
+      const res = await invoke<{ exported: number; skipped: number; output_dir: string; exported_files: string[] }>("export_channel", {
+        request: {
+          channel_name: channel.name,
+          channel_handle: channel.handle,
+          channel_url: channel.url,
+          output_dir: dir,
+          videos: [{
+            id: video.id,
+            title: video.title,
+            url: video.url,
+            duration: video.duration,
+            published_at: video.published_at,
+            language: language,
+            transcription_method: method,
+            full_text: fullText,
+            tags: video.tags,
+          }],
+        },
+      });
+      if (res.exported > 0) {
+        setAutoExportMsg(`Exported — generating summary...`);
+        const summarized: string[] = [];
+        for (const filePath of res.exported_files) {
+          try {
+            await invoke("summarize_video", { filePath });
+            summarized.push(filePath);
+          } catch (err) {
+            console.error("Summary failed:", err);
+            setAutoExportMsg(`Exported (summary failed)`);
+          }
+        }
+        if (summarized.length > 0) {
+          setAutoExportMsg(`Summary ready — updating brain (chunked)...`);
+          const run = await updateChannelBrainChunked(res.output_dir, summarized, {
+            onProgress: (msg) => setAutoExportMsg(msg),
+          });
+          if (run.failedChunk) {
+            setAutoExportMsg(
+              `Brain chunk ${run.failedChunk.index}/${run.chunksTotal} failed ` +
+              `(${run.failedChunk.size} files). ${run.chunksCompleted} chunk(s) ok.`,
+            );
+          } else {
+            setAutoExportMsg(
+              `Done: ${run.chunksCompleted}/${run.chunksTotal} chunk(s), ` +
+              `${run.filesIntegrated} file(s) merged.`,
+            );
+          }
+        }
+      } else if (res.skipped > 0) {
+        setAutoExportMsg(`File already existed at ${res.output_dir}`);
+      }
+      setTimeout(() => setAutoExportMsg(null), 10000);
+    } catch (err) {
+      console.error("Auto-export failed:", err);
+    }
+  }, [channel]);
+
+  const handleRetranscribe = useCallback(async (video: Video) => {
+    setRetranscribing(video.id);
+    try {
+      await updateVideoStatus(video.id, "transcribiendo");
+      await refresh();
+
+      const result = await invoke<{
+        video_id: string;
+        event_type: string;
+        message: string;
+        text?: string;
+        language?: string;
+        method?: string;
+      }>("transcribe_single", {
+        videoId: video.id,
+        videoUrl: video.url,
+      });
+
+      if (result.text && result.language && result.method) {
+        await updateVideoTranscription(video.id, {
+          full_text: result.text,
+          transcription_method: result.method,
+          language: result.language,
+        });
+        await autoExport(video, result.text, result.language, result.method);
+      }
+      await refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await updateVideoStatus(video.id, "error", msg);
+      await refresh();
+    } finally {
+      setRetranscribing(null);
+    }
+  }, [refresh, autoExport]);
+
+  const handleSort = useCallback((field: SortField) => {
+    if (sortField === field) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir(field === "title" ? "asc" : "desc");
+    }
+  }, [sortField]);
+
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    setDurationFilter("all");
+    setDateFilter("all");
+    setStatusFilter("all");
+  }, []);
 
   const handleBatchCreated = useCallback((batchId: number) => {
     setSelected(new Set());
@@ -659,6 +926,12 @@ function ChannelDetailPage() {
         <ExportButton channelId={channelId} channel={channel} />
       </div>
 
+      {autoExportMsg && (
+        <div className="mb-3 rounded-md border border-profit/30 bg-profit/5 px-3 py-2 text-xs text-profit">
+          {autoExportMsg}
+        </div>
+      )}
+
       {/* Stats */}
       <ChannelStats statusCounts={statusCounts} total={videos.length} />
 
@@ -679,6 +952,7 @@ function ChannelDetailPage() {
         duration={durationFilter} onDuration={setDurationFilter}
         date={dateFilter} onDate={setDateFilter}
         status={statusFilter} onStatus={setStatusFilter}
+        onClear={clearFilters}
       />
 
       {/* Bulk actions */}
@@ -722,28 +996,58 @@ function ChannelDetailPage() {
                     </button>
                   </th>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground w-10">#</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Title</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground w-20">Duration</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground w-28">Date</th>
-                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground w-28">Status</th>
+                  <SortableHeader field="title" label="Title" current={sortField} dir={sortDir} onSort={handleSort} />
+                  <SortableHeader field="duration" label="Duration" current={sortField} dir={sortDir} onSort={handleSort} className="w-20" />
+                  <SortableHeader field="date" label="Date" current={sortField} dir={sortDir} onSort={handleSort} className="w-28" />
+                  <SortableHeader field="status" label="Status" current={sortField} dir={sortDir} onSort={handleSort} className="w-28" />
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground w-16">Batch</th>
+                  <th className="px-3 py-2 text-xs font-medium text-muted-foreground w-12"></th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((video, i) => (
+                {paginatedVideos.map((video, i) => (
                   <VideoRow
                     key={video.id}
                     video={video}
-                    index={i}
+                    index={safePage * PAGE_SIZE + i}
                     selected={selected.has(video.id)}
                     onToggle={toggleOne}
+                    onRetranscribe={handleRetranscribe}
+                    retranscribing={retranscribing === video.id}
                   />
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="border-t border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-            Showing {filtered.length} of {videos.length} videos
+          <div className="border-t border-border bg-muted/30 px-3 py-2 flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              {filtered.length === videos.length
+                ? `${filtered.length} videos`
+                : `${filtered.length} of ${videos.length} videos`}
+            </span>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  disabled={safePage === 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="text-xs text-muted-foreground font-mono px-2">
+                  {safePage + 1} / {totalPages}
+                </span>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  disabled={safePage >= totalPages - 1}
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}

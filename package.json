@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-sql": "^2.4.0",
     "class-variance-authority": "^0.7.1",

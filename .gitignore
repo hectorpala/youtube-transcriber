@@ -45,3 +45,12 @@ src-tauri/target/
 
 # misc assets not part of the project
 app-icon.png
+
+# python caches
+**/__pycache__/
+
+# local databases
+*.db
+
+# claude workspace (local-only config and caches)
+.claude/

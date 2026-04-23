@@ -85,15 +85,8 @@ export type BatchInsert = Pick<Batch, "channel_id" | "batch_number"> &
 
 export async function addChannel(channel: ChannelInsert): Promise<void> {
   const d = await getDb();
-  const existing = await d.select<Channel[]>(
-    "SELECT id FROM channels WHERE id = $1",
-    [channel.id]
-  );
-  if (existing.length > 0) {
-    throw new Error(`Channel "${channel.id}" already exists.`);
-  }
   await d.execute(
-    `INSERT INTO channels (id, name, handle, url, thumbnail, total_videos, scraped, status, priority, notes)
+    `INSERT OR IGNORE INTO channels (id, name, handle, url, thumbnail, total_videos, scraped, status, priority, notes)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       channel.id,
@@ -126,6 +119,33 @@ export async function getChannel(id: string): Promise<Channel | undefined> {
   return rows[0];
 }
 
+export async function findChannelByUrlOrId(channelId: string, handle: string | null, channelName?: string): Promise<Channel | undefined> {
+  const d = await getDb();
+  // Try by handle (without @)
+  if (handle) {
+    const byHandle = await d.select<Channel[]>(
+      "SELECT * FROM channels WHERE id = $1 OR handle = $2",
+      [handle.replace(/^@/, ""), handle]
+    );
+    if (byHandle.length > 0) return byHandle[0];
+  }
+  // Try by YouTube channel ID (UC...) in id or url
+  const byChannelId = await d.select<Channel[]>(
+    "SELECT * FROM channels WHERE id = $1 OR url LIKE $2",
+    [channelId, `%${channelId}%`]
+  );
+  if (byChannelId.length > 0) return byChannelId[0];
+  // Try by channel name (e.g. handle stored as @Name matches channel_name)
+  if (channelName) {
+    const byName = await d.select<Channel[]>(
+      "SELECT * FROM channels WHERE name = $1 OR name = $2 OR handle = $3",
+      [channelName, `@${channelName}`, `@${channelName}`]
+    );
+    if (byName.length > 0) return byName[0];
+  }
+  return undefined;
+}
+
 const CHANNEL_COLUMNS = new Set(["name", "handle", "url", "thumbnail", "total_videos", "scraped", "status", "priority", "notes"]);
 const VIDEO_COLUMNS = new Set(["channel_id", "title", "url", "thumbnail", "duration", "published_at", "status", "batch_number", "error_message", "full_text", "transcription_method", "language", "priority", "tags", "transcribed_at"]);
 
@@ -155,10 +175,10 @@ export async function deleteChannel(id: string): Promise<void> {
 
 // ---------- Videos CRUD ----------
 
-export async function addVideo(video: VideoInsert): Promise<void> {
+export async function addVideo(video: VideoInsert): Promise<boolean> {
   const d = await getDb();
-  await d.execute(
-    `INSERT INTO videos (id, channel_id, title, url, thumbnail, duration, published_at, status, batch_number, priority, tags)
+  const result = await d.execute(
+    `INSERT OR IGNORE INTO videos (id, channel_id, title, url, thumbnail, duration, published_at, status, batch_number, priority, tags)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
     [
       video.id,
@@ -174,6 +194,7 @@ export async function addVideo(video: VideoInsert): Promise<void> {
       video.tags ?? null,
     ]
   );
+  return result.rowsAffected > 0;
 }
 
 export async function listVideos(channelId: string): Promise<Video[]> {
@@ -573,6 +594,25 @@ export async function getChannelProgress(channelId: string): Promise<ChannelProg
     skipped: statusMap["omitido"] ?? 0,
     last_batch: lastBatchRows[0] ?? null,
   };
+}
+
+// ---------- Settings ----------
+
+export async function getSetting(key: string): Promise<string | null> {
+  const d = await getDb();
+  const rows = await d.select<{ value: string }[]>(
+    "SELECT value FROM settings WHERE key = $1",
+    [key]
+  );
+  return rows[0]?.value ?? null;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  const d = await getDb();
+  await d.execute(
+    "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2",
+    [key, value]
+  );
 }
 
 export async function getAllChannelProgress(): Promise<Map<string, ChannelProgress>> {
