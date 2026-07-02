@@ -109,6 +109,7 @@ def download_audio(video_url: str, output_path: str) -> str:
         "-o", output_path,
         "--no-warnings",
         "--no-playlist",
+        "--socket-timeout", "30",
     ]
 
     ffmpeg_dir = find_ffmpeg_dir()
@@ -117,7 +118,10 @@ def download_audio(video_url: str, output_path: str) -> str:
 
     cmd.append(video_url)
 
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("yt-dlp timed out downloading audio (30 min)")
     if proc.returncode != 0:
         raise RuntimeError(f"yt-dlp failed: {proc.stderr[:500]}")
 
@@ -164,46 +168,79 @@ def transcribe_with_whisper(audio_path: str, model_name: str, language=None) -> 
     }
 
 
-def transcribe_with_subtitles(video_url: str):
-    """Try to get existing subtitles/auto-captions from YouTube."""
-    emit({"type": "progress", "stage": "subtitles", "message": "Checking for existing subtitles..."})
+def _try_subtitle_lang(video_url: str, lang: str):
+    """Fetch captions for a single language. Returns dict on success, None otherwise.
 
+    Isolated per-language subprocess + tempdir so a failure on one language
+    (e.g. HTTP 429 on YouTube's auto-translate path when asking `es` for an
+    English-only video) cannot abort the attempt for the other language.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         out_template = os.path.join(tmpdir, "subs")
         cmd = [
             find_ytdlp(),
             "--write-auto-sub",
             "--write-sub",
-            "--sub-lang", "es,en",
+            "--sub-lang", lang,
             "--sub-format", "vtt",
             "--skip-download",
             "-o", out_template,
             "--no-warnings",
             "--no-playlist",
+            "--socket-timeout", "30",
             video_url,
         ]
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        except subprocess.TimeoutExpired:
+            return None  # network stall — fall through to next lang / whisper
+        # Ignore return code — only the on-disk file matters.
+        for fname in os.listdir(tmpdir):
+            if fname.endswith(".vtt") and f".{lang}." in fname:
+                text = parse_vtt(os.path.join(tmpdir, fname))
+                if text and len(text) > 50:
+                    return {
+                        "text": text,
+                        "language": lang,
+                        "method": "youtube-subtitles",
+                    }
+    return None
 
-        subprocess.run(cmd, capture_output=True, text=True)
-        # Ignore return code — yt-dlp may error on some langs but still download others
 
-        # Prefer Spanish, fall back to English
-        vtt_files = os.listdir(tmpdir)
-        for lang in ("es", "en"):
-            for fname in vtt_files:
-                if fname.endswith(".vtt") and f".{lang}." in fname:
-                    text = parse_vtt(os.path.join(tmpdir, fname))
-                    if text and len(text) > 50:
-                        return {
-                            "text": text,
-                            "language": lang,
-                            "method": "youtube-subtitles",
-                        }
+def transcribe_with_subtitles(video_url: str):
+    """Try YouTube subtitles, language by language.
+
+    Each language gets its own yt-dlp call so a 429 on one (typically the
+    en↔es auto-translate request, which YouTube rate-limits more aggressively
+    than manual tracks) cannot abort the next. Only after both languages fail
+    does the caller fall back to Whisper.
+
+    Order: en first, then es. Asking `es` first on an English-only channel
+    forces an en→es auto-translate and frequently 429s; en-first short-circuits
+    that. On Spanish channels with a manual `es` track, en yields nothing and
+    es resolves on the second call (one extra ~1-2s yt-dlp call).
+    """
+    emit({"type": "progress", "stage": "subtitles",
+          "message": "Checking for existing subtitles..."})
+
+    for lang in ("en", "es"):
+        result = _try_subtitle_lang(video_url, lang)
+        if result:
+            return result
+        emit({"type": "progress", "stage": "subtitles",
+              "message": f"No {lang} subtitles, trying next..."})
 
     return None
 
 
 def parse_vtt(path: str) -> str:
-    """Extract plain text from a VTT subtitle file."""
+    """Extract plain text from a VTT subtitle file.
+
+    YouTube auto-captions duplican con ventana deslizante: una línea reaparece
+    con palabras nuevas al final (no idéntica ni siempre consecutiva). Además
+    del dedup exacto, se hace dedup por SOLAPAMIENTO: si la línea nueva empieza
+    con el final de lo ya acumulado, solo se agrega la cola nueva.
+    """
     import re
     lines = []
     with open(path, "r", encoding="utf-8") as f:
@@ -217,8 +254,26 @@ def parse_vtt(path: str) -> str:
             clean = re.sub(r"<[^>]+>", "", line).strip()
             if not clean:
                 continue
-            # Remove duplicate consecutive lines (common in auto-captions)
-            if not lines or lines[-1] != clean:
+            # Dedup exacto consecutivo (idénticas seguidas)
+            if lines and lines[-1] == clean:
+                continue
+            # Dedup por solapamiento con las últimas 2 líneas: auto-caption
+            # repite la línea anterior + palabras nuevas. Si `clean` empieza
+            # igual que una línea previa reciente, conservar solo la cola.
+            merged = False
+            for back in (1, 2):
+                if len(lines) >= back:
+                    prev = lines[-back]
+                    if clean.startswith(prev) and len(clean) > len(prev):
+                        tail = clean[len(prev):].strip()
+                        if tail:
+                            lines.append(tail)
+                        merged = True
+                        break
+                    if prev == clean:  # duplicada no-consecutiva inmediata
+                        merged = True
+                        break
+            if not merged:
                 lines.append(clean)
     return " ".join(lines)
 
@@ -239,15 +294,45 @@ def main():
                 emit({"type": "result", **result})
                 return
 
-        # Step 2: Download audio and transcribe with Whisper
-        with tempfile.TemporaryDirectory() as tmpdir:
-            audio_template = os.path.join(tmpdir, "audio.mp3")
-            audio_path = download_audio(args.video_url, audio_template)
+        # Step 2: Download audio and transcribe with Whisper.
+        # Verificar whisper ANTES de descargar: sin él, la descarga es ancho de
+        # banda tirado (el import de transcribe_with_whisper fallaría después).
+        try:
+            import whisper  # noqa: F401
+        except ImportError:
+            emit({"type": "error", "message": "whisper no está instalado (pipx install openai-whisper). No se descarga audio."})
+            sys.exit(1)
 
+        # Audio en caché persistente por video: si whisper crashea o se cancela,
+        # el próximo intento NO re-descarga (cientos de MB). Se borra al lograr
+        # la transcripción.
+        import hashlib
+        import re as _re
+        m = _re.search(r"(?:v=|youtu\.be/|shorts/)([A-Za-z0-9_-]{11})", args.video_url)
+        vid = m.group(1) if m else hashlib.sha1(args.video_url.encode()).hexdigest()[:16]
+        cache_dir = os.path.expanduser("~/Library/Caches/youtube-transcriber/audio")
+        os.makedirs(cache_dir, exist_ok=True)
+        audio_template = os.path.join(cache_dir, f"{vid}.mp3")
+
+        cached = None
+        for ext in (".mp3", ".m4a", ".opus", ".webm"):
+            p = os.path.join(cache_dir, f"{vid}{ext}")
+            if os.path.isfile(p) and os.path.getsize(p) > 0:
+                cached = p
+                break
+        if cached:
+            emit({"type": "progress", "stage": "download", "message": "Audio cacheado de un intento previo — sin re-descargar."})
+            audio_path = cached
+        else:
+            audio_path = download_audio(args.video_url, audio_template)
             emit({"type": "progress", "stage": "download", "message": "Audio downloaded."})
 
-            result = transcribe_with_whisper(audio_path, args.model, args.language)
-            emit({"type": "result", **result})
+        result = transcribe_with_whisper(audio_path, args.model, args.language)
+        try:
+            os.unlink(audio_path)  # éxito: liberar la caché de este video
+        except OSError:
+            pass
+        emit({"type": "result", **result})
 
     except Exception as e:
         emit({"type": "error", "message": str(e)})

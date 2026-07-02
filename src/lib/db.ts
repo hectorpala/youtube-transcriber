@@ -9,6 +9,14 @@ async function initDb(): Promise<Database> {
   await db.execute(
     "UPDATE batches SET status = 'pausado' WHERE status = 'procesando'"
   );
+  // Reset zombie videos stuck in "transcribiendo" (app closed/crashed mid-transcription).
+  // Batch videos go back to the queue so Resume picks them up; loose ones to pendiente.
+  await db.execute(
+    "UPDATE videos SET status = 'en_cola' WHERE status = 'transcribiendo' AND batch_number IS NOT NULL"
+  );
+  await db.execute(
+    "UPDATE videos SET status = 'pendiente' WHERE status = 'transcribiendo'"
+  );
   return db;
 }
 
@@ -273,11 +281,17 @@ export async function bulkUpdateVideoStatus(
 ): Promise<void> {
   if (ids.length === 0) return;
   const d = await getDb();
-  const placeholders = ids.map((_, i) => `$${i + 2}`).join(", ");
-  await d.execute(
-    `UPDATE videos SET status = $1 WHERE id IN (${placeholders})`,
-    [status, ...ids]
-  );
+  // Chunked: SQLite caps bound parameters (~999 in older builds). "Select all"
+  // on a big channel can pass thousands of ids — one giant IN () would throw.
+  const CHUNK = 500;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const chunk = ids.slice(i, i + CHUNK);
+    const placeholders = chunk.map((_, j) => `$${j + 2}`).join(", ");
+    await d.execute(
+      `UPDATE videos SET status = $1 WHERE id IN (${placeholders})`,
+      [status, ...chunk]
+    );
+  }
 }
 
 export async function getNextPendingVideos(

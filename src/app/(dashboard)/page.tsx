@@ -38,8 +38,7 @@ import {
 } from "@/lib/db";
 import { updateChannelBrainChunked } from "@/lib/brain-batch";
 
-const EXPORT_DIR_KEY = "export_dir";
-const DEFAULT_EXPORT_DIR = "/Users/openclaw/Documents/trading-knowledge";
+import { EXPORT_DIR_KEY, DEFAULT_EXPORT_DIR, getWhisperOpts } from "@/lib/batch-persistence";
 import {
   Plus,
   ScanSearch,
@@ -54,6 +53,7 @@ import {
   Play,
   XCircle,
   Trash2,
+  RefreshCw,
 } from "lucide-react";
 
 // ---------- Status helpers ----------
@@ -208,6 +208,7 @@ function AddChannelForm({ onAdd }: { onAdd: () => void }) {
       }>("transcribe_single", {
         videoId: video.video_id,
         videoUrl: videoUrl,
+        ...(await getWhisperOpts()),
       });
 
       if (result.text && result.language && result.method) {
@@ -496,12 +497,25 @@ function ChannelCard({
       case "en_progreso":
       case "completado":
         return (
-          <Link href={`/channel?id=${channel.id}`}>
-            <Button size="sm" variant="secondary">
-              <List className="h-3.5 w-3.5" />
-              <span>View Videos</span>
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onScrape(channel)}
+              disabled={isScraping}
+              title="Buscar videos nuevos del canal"
+            >
+              {isScraping
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <RefreshCw className="h-3.5 w-3.5" />}
             </Button>
-          </Link>
+            <Link href={`/channel?id=${channel.id}`}>
+              <Button size="sm" variant="secondary">
+                <List className="h-3.5 w-3.5" />
+                <span>View Videos</span>
+              </Button>
+            </Link>
+          </div>
         );
       case "error":
         return (
@@ -692,7 +706,18 @@ export default function ChannelsPage() {
         }));
 
         const inserted = await addVideoBulk(videoInserts);
-        await updateChannel(channel.id, { status: "scrapeado", scraped: true, total_videos: inserted });
+        // total_videos = total REAL del canal (no solo los insertados: en un
+        // re-scan `inserted` son únicamente los NUEVOS y dejaría el conteo mal).
+        // En re-scan de un canal avanzado, no degradar su status a "scrapeado";
+        // si aparecieron videos nuevos en uno "completado", vuelve a en_progreso.
+        const avanzado = channel.status === "en_progreso" || channel.status === "completado";
+        const newStatus = avanzado
+          ? (inserted > 0 ? "en_progreso" : channel.status)
+          : "scrapeado";
+        await updateChannel(channel.id, { status: newStatus, scraped: true, total_videos: result.videos.length });
+        if (avanzado) {
+          console.log(`Re-scan ${channel.name}: ${inserted} video(s) nuevo(s) de ${result.videos.length}`);
+        }
         await handleRefresh();
       } catch (err) {
         console.error("Scrape failed:", err);

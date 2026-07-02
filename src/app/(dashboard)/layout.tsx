@@ -4,6 +4,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { Topbar } from "@/components/topbar";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BatchPersistenceMount } from "@/components/batch-persistence-mount";
 
 function PageFallback() {
   return (
@@ -21,6 +22,7 @@ export default function DashboardLayout({
 }) {
   return (
     <SidebarProvider>
+      <BatchPersistenceMount />
       <AppSidebar />
       <div className="flex flex-1 flex-col">
         <Topbar />

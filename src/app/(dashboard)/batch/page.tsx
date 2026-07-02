@@ -24,74 +24,19 @@ import {
   hasActiveBatch,
   getNextPendingVideos,
   createBatchWithVideos,
-  getSetting,
 } from "@/lib/db";
+// Persistence (DB writes, export+summarize, CEREBRO flush) now lives in the
+// app-lifetime module lib/batch-persistence (mounted from the dashboard layout),
+// so transcriptions survive navigating away from this page. This page only
+// renders UI state and subscribes to that module's callbacks.
+import {
+  type BatchEventPayload,
+  subscribeBrainStatus,
+  subscribePersisted,
+  exportAndSummarizeVideo,
+  getWhisperOpts,
+} from "@/lib/batch-persistence";
 import { updateChannelBrainChunked } from "@/lib/brain-batch";
-
-const EXPORT_DIR_KEY = "export_dir";
-const DEFAULT_EXPORT_DIR = "/Users/openclaw/Documents/trading-knowledge";
-
-// Export + summarize one video, WITHOUT updating CEREBRO.md.
-// The brain is updated once per batch (see flushPendingBrain in BatchViewPage)
-// to avoid paying the ~4min-per-video CEREBRO rewrite cost on every video.
-async function exportAndSummarizeVideo(
-  channelId: string,
-  videoId: string,
-  text: string,
-  method: string,
-  language: string,
-): Promise<{ channelDir: string; filePaths: string[] } | null> {
-  try {
-    const [channel, dir] = await Promise.all([
-      getChannel(channelId),
-      getSetting(EXPORT_DIR_KEY).then((v) => v ?? DEFAULT_EXPORT_DIR),
-    ]);
-    if (!channel) return null;
-    const { getDb } = await import("@/lib/db");
-    const db = await getDb();
-    const rows = await db.select<{ title: string; url: string; duration: number | null; published_at: string | null; tags: string | null }[]>(
-      "SELECT title, url, duration, published_at, tags FROM videos WHERE id = $1",
-      [videoId]
-    );
-    const v = rows[0];
-    if (!v) return null;
-
-    const exportRes = await invoke<{ exported_files: string[]; output_dir: string }>("export_channel", {
-      request: {
-        channel_name: channel.name,
-        channel_handle: channel.handle,
-        channel_url: channel.url,
-        output_dir: dir,
-        videos: [{
-          id: videoId,
-          title: v.title,
-          url: v.url,
-          duration: v.duration,
-          published_at: v.published_at,
-          language: language,
-          transcription_method: method,
-          full_text: text,
-          tags: v.tags,
-        }],
-      },
-    });
-
-    const summarized: string[] = [];
-    for (const filePath of exportRes.exported_files) {
-      try {
-        await invoke("summarize_video", { filePath });
-        summarized.push(filePath);
-      } catch (sumErr) {
-        console.error("Summary failed for", videoId, sumErr);
-      }
-    }
-    if (summarized.length === 0) return null;
-    return { channelDir: exportRes.output_dir, filePaths: summarized };
-  } catch (err) {
-    console.error("Auto-export failed for video", videoId, err);
-    return null;
-  }
-}
 import {
   ArrowLeft,
   Play,
@@ -107,19 +52,6 @@ import {
   FileText,
   Plus,
 } from "lucide-react";
-
-// ---------- Types ----------
-
-interface BatchEventPayload {
-  batch_id: number;
-  video_id: string;
-  event_type: string;
-  message: string;
-  percent?: number;
-  text?: string;
-  language?: string;
-  method?: string;
-}
 
 // ---------- Status config ----------
 
@@ -406,10 +338,7 @@ function BatchViewPage() {
   // Ref to track if we should listen for events
   const unlistenRef = useRef<(() => void) | null>(null);
 
-  // Pending summary files per channelDir, flushed into CEREBRO.md once per batch.
-  const pendingBrainRef = useRef<Map<string, string[]>>(new Map());
-  // In-flight export+summarize promises; awaited before flushing the brain.
-  const inflightExportsRef = useRef<Promise<unknown>[]>([]);
+  // Brain flush status comes from the global persistence module (lib/batch-persistence).
   const [brainFlushing, setBrainFlushing] = useState(false);
   const [brainFlushMsg, setBrainFlushMsg] = useState<string | null>(null);
 
@@ -437,79 +366,23 @@ function BatchViewPage() {
     loadData();
   }, [loadData]);
 
-  // Persist helpers with error handling
-  const persistVideoDone = useCallback(async (videoId: string, text: string, method: string, language: string) => {
-    try {
-      await updateVideoTranscription(videoId, { full_text: text, transcription_method: method, language });
-      await recalcBatchCounts(batchId);
-      // Fire-and-forget: export + summarize runs in parallel with next video's transcription.
-      // The resulting summary path is buffered in pendingBrainRef; the batch flush at
-      // batch_done / batch_pausado / batch_cancelado integrates them all in one Claude call.
-      const p = exportAndSummarizeVideo(channelId, videoId, text, method, language)
-        .then((res) => {
-          if (!res) return;
-          const existing = pendingBrainRef.current.get(res.channelDir) ?? [];
-          pendingBrainRef.current.set(res.channelDir, existing.concat(res.filePaths));
-        })
-        .catch((err) => console.error("Export+summarize failed for", videoId, err));
-      inflightExportsRef.current.push(p);
-      await loadData();
-    } catch (err) {
-      console.error("Failed to persist video transcription:", err);
-    }
-  }, [batchId, channelId, loadData]);
+  // Persistence lives in lib/batch-persistence (app-lifetime). Here we only
+  // subscribe: brain-flush status for the banner, and "persisted" to refresh.
+  useEffect(() => {
+    const offBrain = subscribeBrainStatus((s) => {
+      setBrainFlushing(s.flushing);
+      setBrainFlushMsg(s.message);
+    });
+    const offPersisted = subscribePersisted(() => {
+      loadData();
+    });
+    return () => {
+      offBrain();
+      offPersisted();
+    };
+  }, [loadData]);
 
-  // Wait for pending export+summarize tasks, then integrate all buffered summaries
-  // into CEREBRO.md in chunks (one Claude call per chunk, sequential, stop-on-failure).
-  const flushPendingBrain = useCallback(async () => {
-    const inflight = inflightExportsRef.current;
-    inflightExportsRef.current = [];
-    if (inflight.length > 0) {
-      await Promise.allSettled(inflight);
-    }
-    const entries = Array.from(pendingBrainRef.current.entries());
-    pendingBrainRef.current.clear();
-    if (entries.length === 0) return;
-
-    setBrainFlushing(true);
-    setBrainFlushMsg(null);
-    try {
-      for (const [channelDir, files] of entries) {
-        if (files.length === 0) continue;
-        const run = await updateChannelBrainChunked(channelDir, files, {
-          onProgress: (msg) => setBrainFlushMsg(msg),
-        });
-        if (run.failedChunk) {
-          setBrainFlushMsg(
-            `Brain chunk ${run.failedChunk.index}/${run.chunksTotal} failed ` +
-            `(${run.failedChunk.size} files). ${run.chunksCompleted} chunk(s) ` +
-            `integrated, ${run.filesIntegrated} file(s) merged. Remaining chunks skipped.`
-          );
-          console.error("Brain chunk failed", run.failedChunk, "for", channelDir);
-          break;
-        }
-        setBrainFlushMsg(
-          `Brain updated: ${run.chunksCompleted}/${run.chunksTotal} chunk(s), ` +
-          `${run.filesIntegrated}/${run.filesAttempted} file(s) integrated ` +
-          `in ${(run.durationMs / 1000).toFixed(1)}s.`
-        );
-      }
-    } finally {
-      setBrainFlushing(false);
-    }
-  }, []);
-
-  const persistVideoError = useCallback(async (videoId: string, message: string) => {
-    try {
-      await updateVideoStatus(videoId, "error", message);
-      await recalcBatchCounts(batchId);
-      await loadData();
-    } catch (err) {
-      console.error("Failed to persist video error:", err);
-    }
-  }, [batchId, loadData]);
-
-  // Listen for batch events
+  // Listen for batch events (UI-only: persistence is handled globally)
   useEffect(() => {
     let cancelled = false;
 
@@ -537,15 +410,24 @@ function BatchViewPage() {
           case "video_done":
             setCurrentVideoId(null);
             setProgressMsg("");
-            setVideos(prev =>
-              prev.map(v =>
-                v.id === e.video_id
-                  ? { ...v, status: "completado", full_text: e.text ?? null, language: e.language ?? null, transcription_method: e.method ?? null }
-                  : v
-              )
-            );
             if (e.text && e.language && e.method) {
-              persistVideoDone(e.video_id, e.text, e.method, e.language);
+              setVideos(prev =>
+                prev.map(v =>
+                  v.id === e.video_id
+                    ? { ...v, status: "completado", full_text: e.text ?? null, language: e.language ?? null, transcription_method: e.method ?? null }
+                    : v
+                )
+              );
+            } else {
+              // Payload incompleto: NO fingir "completado" en la UI (no se
+              // persistió nada y al recargar revertiría). Se marca error real.
+              setVideos(prev =>
+                prev.map(v =>
+                  v.id === e.video_id
+                    ? { ...v, status: "error", error_message: "Transcripción sin texto/idioma/método (payload incompleto)" }
+                    : v
+                )
+              );
             }
             break;
 
@@ -559,7 +441,6 @@ function BatchViewPage() {
                   : v
               )
             );
-            persistVideoError(e.video_id, e.message);
             break;
 
           case "batch_done":
@@ -568,10 +449,8 @@ function BatchViewPage() {
             setProcessing(false);
             setCurrentVideoId(null);
             setProgressMsg("");
-            // Flush buffered summaries into CEREBRO.md once (single Claude call).
-            // Runs independently of the reload below so the UI reflects completion
-            // immediately while the brain integrates in the background.
-            flushPendingBrain();
+            // Persistence + CEREBRO flush run in lib/batch-persistence; here we
+            // just refresh the view (subscribePersisted also refreshes per video).
             loadData();
             break;
         }
@@ -590,7 +469,7 @@ function BatchViewPage() {
       cancelled = true;
       unlistenRef.current?.();
     };
-  }, [batchId, loadData, flushPendingBrain]);
+  }, [batchId, loadData]);
 
   // ---------- Actions ----------
 
@@ -624,9 +503,10 @@ function BatchViewPage() {
     }
 
     try {
+      const whisper = await getWhisperOpts();
       const result = await invoke<{ completed: number; failed: number; status: string }>(
         "process_batch",
-        { batchId, videos: pendingVideos }
+        { batchId, videos: pendingVideos, model: whisper.model, language: whisper.language }
       );
 
       // Fix #5: Always recalc from DB to include previous runs
@@ -668,9 +548,10 @@ function BatchViewPage() {
     }
 
     try {
+      const whisper = await getWhisperOpts();
       const result = await invoke<{ completed: number; failed: number; status: string }>(
         "process_batch",
-        { batchId, videos: pendingVideos }
+        { batchId, videos: pendingVideos, model: whisper.model, language: whisper.language }
       );
 
       await recalcBatchCounts(batchId);
@@ -715,9 +596,12 @@ function BatchViewPage() {
     setVideos(prev => prev.map(v => v.id === video.id ? { ...v, status: "transcribiendo" } : v));
 
     try {
+      const whisper = await getWhisperOpts();
       const result = await invoke<BatchEventPayload>("transcribe_single", {
         videoId: video.id,
         videoUrl: video.url,
+        model: whisper.model,
+        language: whisper.language,
       });
 
       if (result.text && result.language && result.method) {
@@ -726,6 +610,14 @@ function BatchViewPage() {
           transcription_method: result.method,
           language: result.language,
         });
+        // Igual que el flujo normal del lote: el video reintentado también se
+        // exporta, resume e integra al CEREBRO (antes quedaba fuera del cerebro).
+        void exportAndSummarizeVideo(video.id, result.text, result.method, result.language)
+          .then((res) => {
+            if (!res) return;
+            return updateChannelBrainChunked(res.channelDir, res.filePaths).then(() => undefined);
+          })
+          .catch((err) => console.error("Retry export/brain failed for", video.id, err));
       }
       await recalcBatchCounts(batchId);
       await loadData();

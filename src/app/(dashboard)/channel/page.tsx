@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { useVideos } from "@/hooks/use-videos";
+import { EXPORT_DIR_KEY, DEFAULT_EXPORT_DIR, getWhisperOpts } from "@/lib/batch-persistence";
 import { useBatches } from "@/hooks/use-batches";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -539,9 +540,7 @@ function BatchList({ channelId, batches }: { channelId: string; batches: Batch[]
 }
 
 // ---------- Export button ----------
-
-const EXPORT_DIR_KEY = "export_dir";
-const DEFAULT_EXPORT_DIR = "/Users/openclaw/Documents/trading-knowledge";
+// EXPORT_DIR_KEY / DEFAULT_EXPORT_DIR viven en lib/batch-persistence (única fuente).
 
 function ExportButton({ channelId, channel }: { channelId: string; channel: Channel }) {
   const [exporting, setExporting] = useState(false);
@@ -836,6 +835,7 @@ function ChannelDetailPage() {
       }>("transcribe_single", {
         videoId: video.id,
         videoUrl: video.url,
+        ...(await getWhisperOpts()),
       });
 
       if (result.text && result.language && result.method) {

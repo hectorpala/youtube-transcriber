@@ -14,6 +14,11 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
+
+# Tope duro del escaneo completo (canales enormes en red lenta). yt-dlp con
+# --flat-playlist lista ~1000 videos en segundos; 15 min es muy holgado.
+SCAN_TIMEOUT_S = 900
 
 YTDLP_SEARCH_PATHS = [
     os.path.expanduser("~/.local/bin/yt-dlp"),
@@ -40,6 +45,7 @@ def scrape_channel(channel_url: str):
         "--flat-playlist",
         "--dump-json",
         "--no-warnings",
+        "--socket-timeout", "30",
         "--extractor-args", "youtubetab:approximate_date",
         channel_url,
     ]
@@ -47,6 +53,22 @@ def scrape_channel(channel_url: str):
     videos = []
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+        # Drenar stderr en un hilo: si yt-dlp emite muchos errores por-video y
+        # nadie lee ese pipe, se llena el buffer (~64KB) y AMBOS lados se
+        # bloquean (deadlock clásico de pipes).
+        stderr_chunks: list[str] = []
+        def _drain():
+            try:
+                stderr_chunks.append(proc.stderr.read() or "")
+            except Exception:
+                pass
+        t_err = threading.Thread(target=_drain, daemon=True)
+        t_err.start()
+
+        # Watchdog: mata el proceso si el escaneo excede el tope (red atorada).
+        watchdog = threading.Timer(SCAN_TIMEOUT_S, proc.kill)
+        watchdog.start()
 
         for line in proc.stdout:
             line = line.strip()
@@ -86,11 +108,21 @@ def scrape_channel(channel_url: str):
                 print(json.dumps({"type": "progress", "message": f"Found {len(videos)} videos..."}), flush=True)
 
         proc.wait()
+        watchdog.cancel()
+        t_err.join(timeout=5)
 
         if proc.returncode != 0:
-            stderr = proc.stderr.read()
-            print(json.dumps({"type": "error", "message": f"yt-dlp exited with code {proc.returncode}: {stderr[:500]}"}), flush=True)
-            sys.exit(1)
+            stderr = (stderr_chunks[0] if stderr_chunks else "")
+            # NO tirar el trabajo hecho: un solo video roto al final del canal
+            # puede hacer que yt-dlp salga con código != 0. Si ya parseamos
+            # videos, se entregan como resultado parcial con un aviso.
+            if videos:
+                print(json.dumps({"type": "progress",
+                                  "message": (f"yt-dlp exited with code {proc.returncode} "
+                                              f"(partial scan, kept {len(videos)} videos): {stderr[:300]}")}), flush=True)
+            else:
+                print(json.dumps({"type": "error", "message": f"yt-dlp exited with code {proc.returncode}: {stderr[:500]}"}), flush=True)
+                sys.exit(1)
 
     except FileNotFoundError:
         print(json.dumps({"type": "error", "message": "yt-dlp not found. Install it with: pip install yt-dlp"}), flush=True)

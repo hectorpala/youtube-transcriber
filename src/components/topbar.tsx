@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator";
 import { Sun, Moon, Monitor } from "lucide-react";
 import { usePreferences } from "@/hooks/use-preferences";
 import type { Preferences } from "@/lib/preferences";
+import { WhisperSettings } from "@/components/whisper-settings";
 
 const themeOrder: Preferences["theme"][] = ["system", "dark", "light"];
 const themeIcons = { system: Monitor, dark: Moon, light: Sun } as const;
@@ -23,7 +24,9 @@ export function Topbar() {
       <SidebarTrigger className="-ml-1" />
       <Separator orientation="vertical" className="h-5" />
       <span className="text-sm font-semibold text-foreground">YouTube Transcriber</span>
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-3">
+        <WhisperSettings />
+        <Separator orientation="vertical" className="h-5" />
         <button
           onClick={cycleTheme}
           className="flex items-center justify-center h-8 w-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
