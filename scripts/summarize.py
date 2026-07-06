@@ -7,6 +7,10 @@ Reads the .md file (with YAML frontmatter + transcription text),
 asks Claude to generate a structured summary, and rewrites the .md
 with the summary inserted between frontmatter and the raw text.
 
+The FULL transcription is always summarized (never truncated): up to
+MAX_SINGLE_PASS chars in a single Claude call; longer transcriptions
+(3h+ livestreams) are summarized in chunks and merged in a final call.
+
 Outputs JSON lines:
   {"type":"progress","message":"..."}
   {"type":"result","summary_chars":N,"file":"..."}
@@ -85,6 +89,114 @@ Genera un resumen estructurado en markdown con ESTAS secciones exactas:
 
 Responde SOLO con el markdown del resumen, sin preámbulos ni aclaraciones. Sé conciso. Si alguna sección no aplica, escribe "No mencionado"."""
 
+# Hasta MAX_SINGLE_PASS chars la transcripción va entera en un solo prompt.
+# Más allá (livestreams de 3h+), se resume por tramos y se fusiona — nunca se
+# trunca ni se descarta contenido.
+MAX_SINGLE_PASS = 200_000
+CHUNK_CHARS = 150_000
+CLAUDE_TIMEOUT_S = 300
+
+CHUNK_PROMPT = """Eres un analista experto en trading. Te voy a dar la PARTE {part} de {total} de la transcripción de un video largo de YouTube de un canal de trading.
+
+Resume SOLO esta parte, en markdown, con ESTAS secciones exactas:
+
+## Resumen ejecutivo
+## Contexto de mercado
+## Tickers / Activos mencionados
+## Niveles de precio clave
+## Estrategia / Setup identificado
+## Indicadores usados
+## Conclusión / Acción sugerida
+
+No pierdas ningún nivel de precio, ticker ni setup mencionado en esta parte. Si alguna sección no aplica en esta parte, escribe "No mencionado". Responde SOLO con el markdown, sin preámbulos."""
+
+MERGE_PROMPT = """Eres un analista experto en trading. Te voy a dar resúmenes parciales, en orden cronológico, de UN MISMO video largo de YouTube de trading.
+
+Fusiónalos en UN solo resumen estructurado en markdown con ESTAS secciones exactas:
+
+## Resumen ejecutivo
+(2-3 oraciones sobre el mensaje principal del video)
+
+## Contexto de mercado
+(qué está pasando en el mercado según el análisis del video)
+
+## Tickers / Activos mencionados
+(lista de símbolos: BTC, ETH, XRP, oro, etc., cada uno con una nota breve de lo que se dijo)
+
+## Niveles de precio clave
+(lista de precios específicos mencionados como soportes, resistencias, targets, stop loss)
+
+## Estrategia / Setup identificado
+(describe el setup operativo propuesto: dirección long/short, entrada, stop, target, apalancamiento, temporalidad)
+
+## Indicadores usados
+(RSI, MACD, ADX, medias móviles, etc. que se mencionan)
+
+## Conclusión / Acción sugerida
+(qué recomienda hacer el autor: comprar, vender, esperar, cerrar posiciones)
+
+Consolida sin perder información: TODOS los niveles de precio, tickers y setups de todas las partes deben sobrevivir (deduplica lo repetido). Si el autor cambió de opinión durante el video, refleja la postura FINAL en la conclusión y menciona el cambio. Responde SOLO con el markdown del resumen, sin preámbulos. Si alguna sección no aplica, escribe "No mencionado"."""
+
+
+# Acumulador de tiempo total dentro de Claude CLI (varias llamadas en modo chunked).
+_CLAUDE_MS = [0.0]
+
+
+def run_claude(prompt: str, label: str) -> str:
+    """Una llamada al CLI de Claude. Lanza RuntimeError con mensaje claro si falla."""
+    claude_bin = find_claude()
+    log("claude", f"bin={claude_bin} prompt_chars={len(prompt)} [{label}] — invoking CLI...")
+    t0 = time.perf_counter()
+    try:
+        proc = subprocess.run(
+            [claude_bin, "-p", "--disable-slash-commands",
+             "--disallowedTools", CLAUDE_DISALLOWED_TOOLS,
+             "--append-system-prompt", GUARD_SYS,
+             prompt],
+            capture_output=True,
+            text=True,
+            timeout=CLAUDE_TIMEOUT_S,
+        )
+    except FileNotFoundError:
+        raise RuntimeError("claude CLI not found. Install with: npm i -g @anthropic-ai/claude-code")
+    except subprocess.TimeoutExpired:
+        log("claude", f"TIMEOUT after {CLAUDE_TIMEOUT_S}s [{label}]")
+        raise RuntimeError(f"Claude call timed out after {CLAUDE_TIMEOUT_S}s [{label}]")
+
+    ms = (time.perf_counter() - t0) * 1000
+    _CLAUDE_MS[0] += ms
+    log("claude", f"done in {ms:.1f}ms [{label}] rc={proc.returncode} "
+                  f"stdout_chars={len(proc.stdout)} stderr_chars={len(proc.stderr)}")
+
+    if proc.returncode != 0:
+        raise RuntimeError(f"claude returned {proc.returncode} [{label}]: {proc.stderr[:300]}")
+
+    out = proc.stdout.strip()
+    if len(out) < 100:
+        raise RuntimeError(f"Summary too short ({len(out)} chars) [{label}], likely failed: {out[:200]}")
+    return out
+
+
+def split_chunks(text: str, chunk_chars: int) -> list:
+    """Divide el texto en tramos de ~chunk_chars cortando en límite de párrafo
+    u oración (nunca a mitad de frase). Cubre el 100% del texto, sin pérdida."""
+    chunks = []
+    start = 0
+    n = len(text)
+    while start < n:
+        end = min(start + chunk_chars, n)
+        if end < n:
+            cut = text.rfind("\n", start + chunk_chars // 2, end)
+            if cut == -1:
+                cut = text.rfind(". ", start + chunk_chars // 2, end)
+                cut = cut + 1 if cut != -1 else end
+            end = cut if cut > start else end
+        piece = text[start:end].strip()
+        if piece:
+            chunks.append(piece)
+        start = end
+    return chunks
+
 
 def read_md(path: str):
     with open(path, "r", encoding="utf-8") as f:
@@ -135,53 +247,41 @@ def summarize(md_path: str):
         }), flush=True)
         return
 
-    # Limit transcription size to avoid huge prompts — use first 60k chars
+    # Un solo pase hasta MAX_SINGLE_PASS chars; más largo → resumen por tramos
+    # y fusión final. NUNCA se trunca la transcripción.
     text = body.strip()
     original_chars = len(text)
-    truncated = False
-    if len(text) > 60000:
-        text = text[:60000] + "\n\n[... transcripción truncada ...]"
-        truncated = True
-    log("prompt", f"input_chars={original_chars} sent_chars={len(text)} truncated={truncated}")
-
-    print(json.dumps({"type": "progress", "message": f"Calling Claude ({len(text)} chars)..."}), flush=True)
-
-    claude_bin = find_claude()
-    full_prompt = f"{SUMMARY_PROMPT}\n\n---\nTRANSCRIPCIÓN:\n\n{text}"
-    log("claude", f"bin={claude_bin} prompt_chars={len(full_prompt)} — invoking CLI...")
-    t_claude_start = time.perf_counter()
+    _CLAUDE_MS[0] = 0.0
 
     try:
-        proc = subprocess.run(
-            [claude_bin, "-p", "--disable-slash-commands",
-             "--disallowedTools", CLAUDE_DISALLOWED_TOOLS,
-             "--append-system-prompt", GUARD_SYS,
-             full_prompt],
-            capture_output=True,
-            text=True,
-            timeout=180,
-        )
-    except FileNotFoundError:
-        print(json.dumps({"type": "error", "message": "claude CLI not found. Install with: npm i -g @anthropic-ai/claude-code"}), flush=True)
-        sys.exit(1)
-    except subprocess.TimeoutExpired:
-        log("claude", "TIMEOUT after 180s")
-        print(json.dumps({"type": "error", "message": "Claude call timed out after 180s"}), flush=True)
+        if len(text) <= MAX_SINGLE_PASS:
+            n_chunks = 1
+            log("prompt", f"input_chars={original_chars} mode=single")
+            print(json.dumps({"type": "progress", "message": f"Calling Claude ({len(text)} chars)..."}), flush=True)
+            summary = run_claude(f"{SUMMARY_PROMPT}\n\n---\nTRANSCRIPCIÓN:\n\n{text}", "single")
+        else:
+            chunks = split_chunks(text, CHUNK_CHARS)
+            n_chunks = len(chunks)
+            log("prompt", f"input_chars={original_chars} mode=chunked n_chunks={n_chunks}")
+            partials = []
+            for i, chunk in enumerate(chunks, 1):
+                print(json.dumps({"type": "progress",
+                                  "message": f"Video largo: resumiendo parte {i}/{n_chunks} ({len(chunk)} chars)..."}), flush=True)
+                part = run_claude(
+                    CHUNK_PROMPT.format(part=i, total=n_chunks)
+                    + f"\n\n---\nTRANSCRIPCIÓN (parte {i}/{n_chunks}):\n\n{chunk}",
+                    f"chunk {i}/{n_chunks}")
+                partials.append(f"### Resumen parcial — parte {i}/{n_chunks}\n\n{part}")
+            print(json.dumps({"type": "progress",
+                              "message": f"Fusionando {n_chunks} resúmenes parciales..."}), flush=True)
+            summary = run_claude(
+                MERGE_PROMPT + "\n\n---\nRESÚMENES PARCIALES:\n\n" + "\n\n".join(partials),
+                "merge")
+    except RuntimeError as e:
+        print(json.dumps({"type": "error", "message": str(e)}), flush=True)
         sys.exit(1)
 
-    t_claude_end = time.perf_counter()
-    claude_ms = (t_claude_end - t_claude_start) * 1000
-    log("claude", f"done in {claude_ms:.1f}ms rc={proc.returncode} "
-                  f"stdout_chars={len(proc.stdout)} stderr_chars={len(proc.stderr)}")
-
-    if proc.returncode != 0:
-        print(json.dumps({"type": "error", "message": f"claude returned {proc.returncode}: {proc.stderr[:300]}"}), flush=True)
-        sys.exit(1)
-
-    summary = proc.stdout.strip()
-    if len(summary) < 100:
-        print(json.dumps({"type": "error", "message": f"Summary too short ({len(summary)} chars), likely failed: {summary[:200]}"}), flush=True)
-        sys.exit(1)
+    claude_ms = _CLAUDE_MS[0]
 
     # Rewrite the .md with summary inserted
     new_content = f"{frontmatter}\n{summary}\n\n---\n\n## Transcripción completa\n\n{body}"
@@ -204,6 +304,7 @@ def summarize(md_path: str):
         "claude_ms": round(claude_ms, 1),
         "input_chars": original_chars,
         "file_size_bytes": file_size,
+        "chunks": n_chunks,
     }), flush=True)
 
 
