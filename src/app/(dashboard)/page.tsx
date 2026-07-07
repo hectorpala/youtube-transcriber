@@ -38,7 +38,7 @@ import {
 } from "@/lib/db";
 import { updateChannelBrainChunked } from "@/lib/brain-batch";
 
-import { EXPORT_DIR_KEY, DEFAULT_EXPORT_DIR, getWhisperOpts } from "@/lib/batch-persistence";
+import { EXPORT_DIR_KEY, DEFAULT_EXPORT_DIR, getWhisperOpts, subscribePersisted } from "@/lib/batch-persistence";
 import {
   Plus,
   ScanSearch,
@@ -132,22 +132,6 @@ function extractChannelInfo(input: string): ChannelInfo {
   }
 
   return { id: trimmed, name: trimmed, handle: null, url: `https://www.youtube.com/@${trimmed}` };
-}
-
-async function resolveChannelFromVideo(videoUrl: string): Promise<ChannelInfo> {
-  const result = await invoke<{
-    channel_id: string;
-    channel_name: string;
-    channel_url: string;
-    handle: string | null;
-  }>("resolve_channel", { url: videoUrl });
-
-  return {
-    id: result.handle ? result.handle.slice(1) : result.channel_id,
-    name: result.channel_name,
-    handle: result.handle,
-    url: result.channel_url,
-  };
 }
 
 interface ResolvedVideo {
@@ -265,8 +249,11 @@ function AddChannelForm({ onAdd }: { onAdd: () => void }) {
       const msg = err instanceof Error ? err.message : String(err);
       await updateVideoStatus(video.video_id, "error", msg);
       throw err;
+    } finally {
+      // Siempre refrescar stats: al fallar la transcripción el conteo de
+      // errores del canal quedaba desactualizado (el throw saltaba onAdd).
+      onAdd();
     }
-    onAdd();
   }, [onAdd]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -291,18 +278,22 @@ function AddChannelForm({ onAdd }: { onAdd: () => void }) {
         setFormState({ step: "error", message: err instanceof Error ? err.message : String(err) });
       }
     } else {
-      // --- Channel URL flow (original) ---
+      // --- Channel URL flow ---
       setFormState({ step: "resolving" });
       try {
-        let info: ChannelInfo;
-        if (value.trim().startsWith("@") || !isVideoUrl(value)) {
-          info = extractChannelInfo(value);
+        const info = extractChannelInfo(value);
+        // Dedup: el mismo canal agregado antes con otro formato (URL /channel/UC…
+        // vs @handle) deriva un id distinto y creaba una segunda fila con
+        // progreso separado. Igual que ya hace el flujo de video-URL.
+        const existing = await findChannelByUrlOrId(info.id, info.handle, info.name);
+        if (existing) {
+          setValue("");
+          setFormState({ step: "done", message: `Channel already exists: ${existing.name}` });
         } else {
-          info = await resolveChannelFromVideo(value.trim());
+          await add({ id: info.id, name: info.name, handle: info.handle, url: info.url });
+          setValue("");
+          setFormState({ step: "idle" });
         }
-        await add({ id: info.id, name: info.name, handle: info.handle, url: info.url });
-        setValue("");
-        setFormState({ step: "idle" });
         onAdd();
       } catch (err) {
         setFormState({ step: "error", message: err instanceof Error ? err.message : String(err) });
@@ -524,6 +515,16 @@ function ChannelCard({
             <span>Retry</span>
           </Button>
         );
+      case "scrapeando":
+        // Estado zombie (crash a mitad de scrape en otra sesión; initDb lo
+        // resetea al arrancar, pero si se ve en vivo, ofrecer re-scan en vez
+        // de dejar el canal sin acciones).
+        return (
+          <Button size="sm" variant="outline" onClick={() => onScrape(channel)} disabled={isScraping}>
+            {isScraping ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ScanSearch className="h-3.5 w-3.5" />}
+            <span>{isScraping ? "Scanning..." : "Re-scan"}</span>
+          </Button>
+        );
       default:
         return (
           <Link href={`/channel?id=${channel.id}`}>
@@ -578,6 +579,13 @@ function ChannelCard({
             <Loader2 className="h-3 w-3 animate-spin text-primary" />
             <span>{scrapeState.progress}</span>
           </div>
+        )}
+
+        {/* Motivo del error de scrape: se guardaba en notes pero nunca se mostraba */}
+        {channel.status === "error" && channel.notes && (
+          <p className="text-xs text-destructive mb-3 line-clamp-2" title={channel.notes}>
+            {channel.notes}
+          </p>
         )}
 
         {/* Progress bar */}
@@ -676,6 +684,14 @@ export default function ChannelsPage() {
   useEffect(() => {
     if (!loading) loadStats();
   }, [loading, loadStats]);
+
+  // Refrescar en vivo mientras un lote corre en segundo plano: sin esto los
+  // contadores y barras de esta página quedaban congelados hasta re-entrar.
+  useEffect(() => {
+    return subscribePersisted(() => {
+      void loadStats();
+    });
+  }, [loadStats]);
 
   const handleRefresh = useCallback(async () => {
     await refresh();

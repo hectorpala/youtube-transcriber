@@ -8,9 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent } from "@/components/ui/card";
 import { useVideos } from "@/hooks/use-videos";
-import { EXPORT_DIR_KEY, DEFAULT_EXPORT_DIR, getWhisperOpts } from "@/lib/batch-persistence";
+import { EXPORT_DIR_KEY, DEFAULT_EXPORT_DIR, getWhisperOpts, subscribePersisted } from "@/lib/batch-persistence";
 import { useBatches } from "@/hooks/use-batches";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -684,6 +683,15 @@ function ChannelDetailPage() {
     })();
   }, [channelId]);
 
+  // Refrescar en vivo mientras un lote corre en segundo plano: sin esto la
+  // tabla de videos y los contadores quedaban congelados hasta re-entrar.
+  useEffect(() => {
+    return subscribePersisted(() => {
+      void refresh();
+      void refreshBatches();
+    });
+  }, [refresh, refreshBatches]);
+
   // Filtered + sorted videos
   const filtered = useMemo(() => {
     const dateCutoff = getDateCutoff(dateFilter);
@@ -755,7 +763,9 @@ function ChannelDetailPage() {
     setSelected(new Set());
   }, [selected, bulkSetStatus]);
 
-  const [retranscribing, setRetranscribing] = useState<string | null>(null);
+  // Set (no un solo id): dos retranscripciones simultáneas con un string único
+  // se pisaban el indicador y permitían dobles clics sobre el mismo video.
+  const [retranscribing, setRetranscribing] = useState<Set<string>>(new Set());
   const [autoExportMsg, setAutoExportMsg] = useState<string | null>(null);
 
   const autoExport = useCallback(async (video: Video, fullText: string, language: string | null, method: string | null) => {
@@ -820,7 +830,8 @@ function ChannelDetailPage() {
   }, [channel]);
 
   const handleRetranscribe = useCallback(async (video: Video) => {
-    setRetranscribing(video.id);
+    if (retranscribing.has(video.id)) return;
+    setRetranscribing(prev => new Set(prev).add(video.id));
     try {
       await updateVideoStatus(video.id, "transcribiendo");
       await refresh();
@@ -852,9 +863,13 @@ function ChannelDetailPage() {
       await updateVideoStatus(video.id, "error", msg);
       await refresh();
     } finally {
-      setRetranscribing(null);
+      setRetranscribing(prev => {
+        const next = new Set(prev);
+        next.delete(video.id);
+        return next;
+      });
     }
-  }, [refresh, autoExport]);
+  }, [refresh, autoExport, retranscribing]);
 
   const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
@@ -1013,7 +1028,7 @@ function ChannelDetailPage() {
                     selected={selected.has(video.id)}
                     onToggle={toggleOne}
                     onRetranscribe={handleRetranscribe}
-                    retranscribing={retranscribing === video.id}
+                    retranscribing={retranscribing.has(video.id)}
                   />
                 ))}
               </tbody>

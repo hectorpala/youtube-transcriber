@@ -17,6 +17,25 @@ async function initDb(): Promise<Database> {
   await db.execute(
     "UPDATE videos SET status = 'pendiente' WHERE status = 'transcribiendo'"
   );
+  // Reset zombie channels stuck in "scrapeando" (app closed/crashed mid-scrape).
+  // Sin esto el canal quedaba atascado para siempre: la UI no tiene acciones
+  // para ese estado. Ya escaneado antes → 'scrapeado'; nunca escaneado → 'nuevo'.
+  await db.execute(
+    "UPDATE channels SET status = CASE WHEN scraped THEN 'scrapeado' ELSE 'nuevo' END WHERE status = 'scrapeando'"
+  );
+  // Cola persistente de resúmenes pendientes de integrar al CEREBRO. Antes
+  // vivía solo en memoria (Map en batch-persistence): cerrar la app entre el
+  // summarize y el flush perdía la integración SIN rastro (los videos ya
+  // estaban 'completado' y nada los volvía a tocar). Creada aquí (no en las
+  // migraciones Rust) para no requerir recompilar Tauri.
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS pending_brain_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      channel_dir TEXT NOT NULL,
+      file_path TEXT NOT NULL UNIQUE,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )`
+  );
   return db;
 }
 
@@ -351,13 +370,23 @@ export async function createBatchWithVideos(
      VALUES ($1, $2, $3, 'preparado')`,
     [channelId, batchNumber, videoIds.length]
   );
-  const batchId = result.lastInsertId ?? 0;
+  const batchId = result.lastInsertId;
+  if (batchId == null) {
+    throw new Error("createBatchWithVideos: INSERT returned no lastInsertId");
+  }
 
-  const ph = videoIds.map((_, i) => `$${i + 2}`).join(", ");
-  await d.execute(
-    `UPDATE videos SET status = 'en_cola', batch_number = $1 WHERE id IN (${ph})`,
-    [batchNumber, ...videoIds]
-  );
+  // Chunked: SQLite caps bound parameters (~999 in older builds). "Select all"
+  // on a big channel used to throw here AFTER inserting the batch row, leaving
+  // a 'preparado' batch with zero queued videos.
+  const CHUNK = 500;
+  for (let i = 0; i < videoIds.length; i += CHUNK) {
+    const chunk = videoIds.slice(i, i + CHUNK);
+    const ph = chunk.map((_, j) => `$${j + 2}`).join(", ");
+    await d.execute(
+      `UPDATE videos SET status = 'en_cola', batch_number = $1 WHERE id IN (${ph})`,
+      [batchNumber, ...chunk]
+    );
+  }
 
   return { batchId, batchNumber };
 }
@@ -627,6 +656,48 @@ export async function setSetting(key: string, value: string): Promise<void> {
     "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $2",
     [key, value]
   );
+}
+
+// ---------- Pending brain files (cola persistente CEREBRO) ----------
+
+export interface PendingBrainFile {
+  channel_dir: string;
+  file_path: string;
+}
+
+export async function addPendingBrainFiles(
+  channelDir: string,
+  filePaths: string[]
+): Promise<void> {
+  if (filePaths.length === 0) return;
+  const d = await getDb();
+  for (const filePath of filePaths) {
+    await d.execute(
+      "INSERT OR IGNORE INTO pending_brain_files (channel_dir, file_path) VALUES ($1, $2)",
+      [channelDir, filePath]
+    );
+  }
+}
+
+export async function listPendingBrainFiles(): Promise<PendingBrainFile[]> {
+  const d = await getDb();
+  return d.select<PendingBrainFile[]>(
+    "SELECT channel_dir, file_path FROM pending_brain_files ORDER BY id ASC"
+  );
+}
+
+export async function deletePendingBrainFiles(filePaths: string[]): Promise<void> {
+  if (filePaths.length === 0) return;
+  const d = await getDb();
+  const CHUNK = 500;
+  for (let i = 0; i < filePaths.length; i += CHUNK) {
+    const chunk = filePaths.slice(i, i + CHUNK);
+    const ph = chunk.map((_, j) => `$${j + 1}`).join(", ");
+    await d.execute(
+      `DELETE FROM pending_brain_files WHERE file_path IN (${ph})`,
+      chunk
+    );
+  }
 }
 
 export async function getAllChannelProgress(): Promise<Map<string, ChannelProgress>> {

@@ -91,6 +91,62 @@ def atomic_write(path: str, content: str) -> None:
         raise
 
 
+BRAIN_SECTIONS = [
+    "# Cerebro del trader",
+    "## Perfil del trader",
+    "## Indicadores que utiliza",
+    "## Estrategias / Setups identificados",
+    "## Reglas de gestión de riesgo",
+    "## Psicología / Reglas mentales",
+    "## Tickers / Activos que analiza frecuentemente",
+    "## Patrones recurrentes observados",
+    "## Videos fuente procesados",
+]
+
+
+def clean_brain_output(raw: str):
+    """Valida y limpia la respuesta de Claude ANTES de escribirla al CEREBRO.
+
+    El CEREBRO completo se re-inyecta en cada corrida futura: un fence de
+    markdown, un preámbulo o una prosa de cierre ("He integrado...") que se
+    cuele aquí queda dentro del documento PERMANENTEMENTE y contamina todos
+    los prompts siguientes. Devuelve (texto_limpio, "") o (None, motivo).
+    """
+    text = raw.strip()
+    # Desenvolver fence ```markdown ... ```
+    if text.startswith("```"):
+        nl = text.find("\n")
+        if nl != -1:
+            text = text[nl + 1:]
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[:-3]
+        text = text.strip()
+    # Descartar preámbulo antes del título
+    idx = text.find(BRAIN_SECTIONS[0])
+    if idx > 0:
+        text = text[idx:]
+    # Las 8 secciones canónicas deben existir y venir en orden
+    pos = 0
+    for sec in BRAIN_SECTIONS:
+        i = text.find(sec, pos)
+        if i == -1:
+            return None, f"missing/out-of-order section {sec!r}"
+        pos = i + len(sec)
+    # La última sección es estrictamente una lista de videos: cortar en la
+    # primera línea que no sea bullet, placeholder "(...)" o línea en blanco.
+    last_start = text.rfind(BRAIN_SECTIONS[-1])
+    head = text[:last_start]
+    tail_lines = text[last_start:].split("\n")
+    kept = [tail_lines[0]]
+    for line in tail_lines[1:]:
+        s = line.strip()
+        if s == "" or s.startswith("- ") or (s.startswith("(") and s.endswith(")")):
+            kept.append(line)
+        else:
+            break
+    return (head + "\n".join(kept)).rstrip() + "\n", ""
+
+
 EMPTY_BRAIN_TEMPLATE = """# Cerebro del trader
 
 ## Perfil del trader
@@ -176,19 +232,23 @@ def read_summary_from_md(md_path: str) -> tuple[str, str]:
                 elif line.startswith("date:"):
                     date = line.split(":", 1)[1].strip().strip('"')
 
-    # Extract only the summary portion (between frontmatter end and "## Transcripción completa")
+    # Extraer solo el resumen: quitar el frontmatter POR POSICIÓN (no con
+    # split por "\n---\n": una regla horizontal DENTRO del resumen —markdown
+    # común— cortaba la extracción a la mitad en silencio).
     summary_text = content
-    if "---\n" in content:
-        # Body is after second ---
-        parts = content.split("\n---\n", 2)
-        if len(parts) >= 2:
-            summary_text = parts[1]
+    if content.startswith("---\n"):
+        fm_end = content.find("\n---\n", 4)
+        if fm_end != -1:
+            summary_text = content[fm_end + 5:]
 
     # Cut off at the full transcription section
     if "## Transcripción completa" in summary_text:
         summary_text = summary_text.split("## Transcripción completa")[0]
+    summary_text = summary_text.strip()
+    if summary_text.endswith("---"):  # separador previo a la transcripción
+        summary_text = summary_text[:-3].rstrip()
 
-    return summary_text.strip(), f"{date}: {title}"
+    return summary_text, f"{date}: {title}"
 
 
 def update_brain(channel_dir: str, summary_file: str):
@@ -291,11 +351,13 @@ NUEVO RESUMEN (video: {video_label}):
     t_claude_start = time.perf_counter()
 
     try:
+        # Prompt por STDIN, no por argv: cerebro grande + resumen excedían
+        # ARG_MAX (~1MB en macOS) y el exec moría con OSError sin mensaje.
         proc = subprocess.run(
             [claude_bin, "-p", "--disable-slash-commands",
              "--disallowedTools", CLAUDE_DISALLOWED_TOOLS,
-             "--append-system-prompt", GUARD_SYS,
-             full_prompt],
+             "--append-system-prompt", GUARD_SYS],
+            input=full_prompt,
             capture_output=True,
             text=True,
             timeout=480,
@@ -317,10 +379,14 @@ NUEVO RESUMEN (video: {video_label}):
         print(json.dumps({"type": "error", "message": f"claude returned {proc.returncode}: {proc.stderr[:300]}"}), flush=True)
         sys.exit(1)
 
-    new_brain = proc.stdout.strip()
-    if not new_brain.startswith("#") or len(new_brain) < 200:
-        print(json.dumps({"type": "error", "message": f"Invalid brain output ({len(new_brain)} chars): {new_brain[:200]}"}), flush=True)
+    raw_out = proc.stdout.strip()
+    new_brain, clean_err = clean_brain_output(raw_out)
+    if new_brain is None or len(new_brain) < 200:
+        reason = clean_err or f"{len(new_brain or '')} chars"
+        print(json.dumps({"type": "error", "message": f"Invalid brain output ({reason}): {raw_out[:200]}"}), flush=True)
         sys.exit(1)
+    if len(new_brain) != len(raw_out):
+        log("clean", f"stripped {len(raw_out) - len(new_brain):+d} chars of non-brain output (fence/preamble/trailing prose)")
 
     # Safety guard: reject a shrinking output that loses a large fraction of existing
     # bytes. Integrating ONE summary should grow (or barely consolidate) the brain,

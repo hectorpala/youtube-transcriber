@@ -22,6 +22,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime
 
@@ -60,6 +61,24 @@ def find_claude() -> str:
 def log(stage: str, msg: str) -> None:
     ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
     print(f"[{ts}] [summarize] [{stage}] {msg}", file=sys.stderr, flush=True)
+
+
+def atomic_write(path: str, content: str) -> None:
+    """Write via tempfile + os.replace: este .md es la ÚNICA copia de la
+    transcripción — un crash/disco lleno a mitad de un write in-place la
+    destruiría. Mismo mecanismo que en los update_brain*."""
+    dir_ = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(prefix=".summarize.", suffix=".tmp", dir=dir_)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 SUMMARY_PROMPT = """Eres un analista experto en trading. Te voy a dar la transcripción de un video de YouTube de un canal de trading.
@@ -148,11 +167,13 @@ def run_claude(prompt: str, label: str) -> str:
     log("claude", f"bin={claude_bin} prompt_chars={len(prompt)} [{label}] — invoking CLI...")
     t0 = time.perf_counter()
     try:
+        # Prompt por STDIN, no por argv: transcripciones grandes excedían
+        # ARG_MAX (~1MB en macOS) y el exec moría con OSError sin mensaje.
         proc = subprocess.run(
             [claude_bin, "-p", "--disable-slash-commands",
              "--disallowedTools", CLAUDE_DISALLOWED_TOOLS,
-             "--append-system-prompt", GUARD_SYS,
-             prompt],
+             "--append-system-prompt", GUARD_SYS],
+            input=prompt,
             capture_output=True,
             text=True,
             timeout=CLAUDE_TIMEOUT_S,
@@ -287,8 +308,7 @@ def summarize(md_path: str):
     new_content = f"{frontmatter}\n{summary}\n\n---\n\n## Transcripción completa\n\n{body}"
 
     t_write_start = time.perf_counter()
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write(new_content)
+    atomic_write(md_path, new_content)
     t_write_end = time.perf_counter()
     log("write", f"done in {(t_write_end - t_write_start) * 1000:.1f}ms "
                  f"new_file_bytes={len(new_content.encode('utf-8'))} summary_chars={len(summary)}")

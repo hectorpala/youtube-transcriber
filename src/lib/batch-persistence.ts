@@ -11,18 +11,23 @@
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  addPendingBrainFiles,
+  deletePendingBrainFiles,
   getChannel,
   getDb,
   getSetting,
+  listPendingBrainFiles,
   recalcBatchCounts,
   updateVideoStatus,
   updateVideoTranscription,
 } from "@/lib/db";
-import { updateChannelBrainChunked } from "@/lib/brain-batch";
+import { BRAIN_BATCH_CHUNK_SIZE, updateChannelBrainChunked } from "@/lib/brain-batch";
 import { sendNotification } from "@/lib/notifications";
 
 export const EXPORT_DIR_KEY = "export_dir";
-export const DEFAULT_EXPORT_DIR = "/Users/openclaw/Documents/trading-knowledge";
+// La base de conocimiento se movió a Documents/Conocimiento/ (jul-2026). Con el
+// default viejo, un export sin setting recreaba la ruta vieja y PARTÍA la base.
+export const DEFAULT_EXPORT_DIR = "/Users/openclaw/Documents/Conocimiento/trading-knowledge";
 
 // Whisper: modelo e idioma configurables (settings SQLite). El backend Rust ya
 // aceptaba `model`/`language` opcionales pero la UI nunca los pasaba (siempre
@@ -93,9 +98,10 @@ function emitPersisted() {
 
 // ---------- module state (survives page navigation) ----------
 
-// Pending summary files per channelDir, flushed into CEREBRO.md once per batch.
-const pendingBrain = new Map<string, string[]>();
-// In-flight export+summarize promises; awaited before flushing the brain.
+// Pending summary files live in SQLite (`pending_brain_files`), NOT in memory:
+// if the app closes/crashes between summarize and the brain flush, the queue
+// survives and the startup flush recovers it. In-memory state here is only
+// the in-flight export+summarize promises, awaited before flushing.
 let inflightExports: Promise<unknown>[] = [];
 
 // Export + summarize one video, WITHOUT updating CEREBRO.md.
@@ -165,9 +171,44 @@ async function persistVideoDone(batchId: number, videoId: string, text: string, 
   try {
     await updateVideoTranscription(videoId, { full_text: text, transcription_method: method, language });
     await recalcBatchCounts(batchId);
+    // El transcript ya vive en SQLite: su copia de respaldo en el spool sobra.
+    void invoke("discard_spooled_transcript", { videoId }).catch(() => {});
     emitPersisted();
   } catch (err) {
     console.error("Failed to persist video transcription:", err);
+  }
+}
+
+// Ingesta completa de una transcripción terminada — usada tanto por el evento
+// video_done como por la recuperación del spool al arrancar. El registro del
+// export es SÍNCRONO (antes de cualquier await): batch_done puede llegar justo
+// después del último video_done y flushPendingBrain debe verlo en inflightExports.
+function ingestTranscript(batchId: number, videoId: string, text: string, method: string, language: string) {
+  const p = exportAndSummarizeVideo(videoId, text, method, language)
+    .then((res) => {
+      if (!res) return;
+      // A SQLite, no a memoria: sobrevive cierre/crash de la app.
+      return addPendingBrainFiles(res.channelDir, res.filePaths);
+    })
+    .catch((err) => console.error("Export+summarize failed for", videoId, err));
+  inflightExports.push(p);
+  void persistVideoDone(batchId, videoId, text, method, language);
+}
+
+// Transcripts que el backend Rust dejó en el spool y nunca llegaron a SQLite
+// (webview recargado o app cerrada justo en el video_done): re-ingestarlos.
+async function recoverSpooledTranscripts(): Promise<void> {
+  try {
+    const spooled = await invoke<
+      { batch_id: number; video_id: string; text: string; language: string; method: string }[]
+    >("read_spooled_transcripts");
+    if (spooled.length === 0) return;
+    console.log(`[batch-persistence] recovering ${spooled.length} spooled transcript(s) from previous session`);
+    for (const t of spooled) {
+      ingestTranscript(t.batch_id, t.video_id, t.text, t.method, t.language);
+    }
+  } catch (err) {
+    console.error("Failed to read spooled transcripts:", err);
   }
 }
 
@@ -181,43 +222,86 @@ async function persistVideoError(batchId: number, videoId: string, message: stri
   }
 }
 
-// Wait for pending export+summarize tasks, then integrate all buffered
+// Wait for pending export+summarize tasks, then integrate all queued
 // summaries into CEREBRO.md in chunks (one Claude call per chunk, sequential).
-async function flushPendingBrain() {
-  const inflight = inflightExports;
-  inflightExports = [];
-  if (inflight.length > 0) {
-    await Promise.allSettled(inflight);
-  }
-  const entries = Array.from(pendingBrain.entries());
-  pendingBrain.clear();
-  if (entries.length === 0) return;
+// Reads the queue from SQLite; rows are deleted only AFTER their chunk was
+// integrated, so a crash or failure keeps them queued for the next flush
+// (re-integrating an already-merged file is cheap: the Python side skips it
+// by video label). Returns the final status message of THIS run (or null if
+// nothing was integrated) so callers never notify with a stale message.
+let flushInProgress = false;
+let flushQueued = false;
 
-  emitBrain({ flushing: true, message: null });
+async function flushPendingBrain(): Promise<string | null> {
+  if (flushInProgress) {
+    // A flush is already draining the queue; make it loop once more so rows
+    // added meanwhile are picked up.
+    flushQueued = true;
+    return null;
+  }
+  flushInProgress = true;
   let lastMsg: string | null = null;
   try {
-    for (const [channelDir, files] of entries) {
-      if (files.length === 0) continue;
-      const run = await updateChannelBrainChunked(channelDir, files, {
-        onProgress: (msg) => emitBrain({ flushing: true, message: msg }),
-      });
-      if (run.failedChunk) {
-        lastMsg =
-          `Brain chunk ${run.failedChunk.index}/${run.chunksTotal} failed ` +
-          `(${run.failedChunk.size} files). ${run.chunksCompleted} chunk(s) ` +
-          `integrated, ${run.filesIntegrated} file(s) merged. Remaining chunks skipped.`;
-        console.error("Brain chunk failed", run.failedChunk, "for", channelDir);
-        break;
+    do {
+      flushQueued = false;
+      const inflight = inflightExports;
+      inflightExports = [];
+      if (inflight.length > 0) {
+        await Promise.allSettled(inflight);
       }
-      lastMsg =
-        `Brain updated: ${run.chunksCompleted}/${run.chunksTotal} chunk(s), ` +
-        `${run.filesIntegrated}/${run.filesAttempted} file(s) integrated ` +
-        `in ${(run.durationMs / 1000).toFixed(1)}s.`;
-      emitBrain({ flushing: true, message: lastMsg });
-    }
+
+      const rows = await listPendingBrainFiles();
+      if (rows.length === 0) continue;
+
+      const byChannel = new Map<string, string[]>();
+      for (const r of rows) {
+        const existing = byChannel.get(r.channel_dir) ?? [];
+        existing.push(r.file_path);
+        byChannel.set(r.channel_dir, existing);
+      }
+
+      emitBrain({ flushing: true, message: null });
+      for (const [channelDir, files] of byChannel) {
+        try {
+          const run = await updateChannelBrainChunked(channelDir, files, {
+            onProgress: (msg) => emitBrain({ flushing: true, message: msg }),
+          });
+          // Chunks run in order over `files`, so on a partial failure exactly
+          // the first chunksCompleted*CHUNK_SIZE files were integrated.
+          const integrated = run.failedChunk
+            ? files.slice(0, run.chunksCompleted * BRAIN_BATCH_CHUNK_SIZE)
+            : files;
+          await deletePendingBrainFiles(integrated);
+          if (run.failedChunk) {
+            lastMsg =
+              `Brain chunk ${run.failedChunk.index}/${run.chunksTotal} failed ` +
+              `(${run.failedChunk.size} files). ${run.chunksCompleted} chunk(s) ` +
+              `integrated, ${run.filesIntegrated} file(s) merged. ` +
+              `${files.length - integrated.length} file(s) stay queued for retry.`;
+            console.error("Brain chunk failed", run.failedChunk, "for", channelDir);
+          } else {
+            lastMsg =
+              `Brain updated: ${run.chunksCompleted}/${run.chunksTotal} chunk(s), ` +
+              `${run.filesIntegrated}/${run.filesAttempted} file(s) integrated ` +
+              `in ${(run.durationMs / 1000).toFixed(1)}s.`;
+            emitBrain({ flushing: true, message: lastMsg });
+          }
+        } catch (err) {
+          // Unexpected throw (not a failedChunk result): keep this channel's
+          // rows queued and continue with the remaining channels.
+          console.error("Brain update failed for", channelDir, err);
+          lastMsg =
+            `Brain update failed for ${channelDir}: ` +
+            `${err instanceof Error ? err.message : String(err)} — ` +
+            `${files.length} file(s) stay queued for retry.`;
+        }
+      }
+    } while (flushQueued);
   } finally {
+    flushInProgress = false;
     emitBrain({ flushing: false, message: lastMsg });
   }
+  return lastMsg;
 }
 
 // ---------- init (singleton, mounted once from the dashboard layout) ----------
@@ -233,18 +317,7 @@ export function initBatchPersistence(): void {
     switch (e.event_type) {
       case "video_done":
         if (e.text && e.language && e.method) {
-          // Register the export promise SYNCHRONOUSLY (before any await):
-          // batch_done can arrive right after the last video_done, and
-          // flushPendingBrain must see this export in inflightExports.
-          const p = exportAndSummarizeVideo(e.video_id, e.text, e.method, e.language)
-            .then((res) => {
-              if (!res) return;
-              const existing = pendingBrain.get(res.channelDir) ?? [];
-              pendingBrain.set(res.channelDir, existing.concat(res.filePaths));
-            })
-            .catch((err) => console.error("Export+summarize failed for", e.video_id, err));
-          inflightExports.push(p);
-          void persistVideoDone(e.batch_id, e.video_id, e.text, e.method, e.language);
+          ingestTranscript(e.batch_id, e.video_id, e.text, e.method, e.language);
         } else {
           void persistVideoError(e.batch_id, e.video_id,
             "Transcripción sin texto/idioma/método (payload incompleto)");
@@ -255,6 +328,15 @@ export function initBatchPersistence(): void {
         void persistVideoError(e.batch_id, e.video_id, e.message);
         break;
 
+      case "video_requeued":
+        // Video interrumpido por pause/cancel (el backend mató el proceso):
+        // vuelve a la cola, NO es un error.
+        void updateVideoStatus(e.video_id, "en_cola")
+          .then(() => recalcBatchCounts(e.batch_id))
+          .then(() => emitPersisted())
+          .catch((err) => console.error("Failed to requeue video", e.video_id, err));
+        break;
+
       case "batch_done":
       case "batch_pausado":
       case "batch_cancelado":
@@ -262,14 +344,32 @@ export function initBatchPersistence(): void {
           void sendNotification("Lote terminado ✅", e.message || "Todas las transcripciones del lote acabaron.");
         }
         void flushPendingBrain()
-          .then(() => {
-            if (e.event_type === "batch_done" && lastBrainStatus.message) {
-              void sendNotification("CEREBRO actualizado 🧠", lastBrainStatus.message);
+          .then((msg) => {
+            // Usar el mensaje de ESTE flush (no lastBrainStatus, que puede
+            // conservar el de un lote anterior si este flush no integró nada).
+            if (e.event_type === "batch_done" && msg) {
+              void sendNotification("CEREBRO actualizado 🧠", msg);
             }
-          });
+          })
+          .catch((err) => console.error("Brain flush failed after batch event:", err));
         break;
     }
-  }).catch((err) => {
+  }).then(() => {
+    // Recuperación al arrancar, en orden: (1) transcripts que quedaron en el
+    // spool sin llegar a SQLite, (2) resúmenes en cola sin integrar al CEREBRO.
+    // recoverSpooledTranscripts registra sus exports en inflightExports, así
+    // que el flush posterior también integra lo recién recuperado.
+    recoverSpooledTranscripts()
+      .then(() => flushPendingBrain())
+      .then((msg) => {
+        if (msg) {
+          void sendNotification("CEREBRO actualizado 🧠", `Recuperado de la sesión anterior — ${msg}`);
+        }
+      })
+      .catch((err) => console.error("Startup brain recovery flush failed:", err));
+  }, (err) => {
+    // Solo el fallo del REGISTRO del listener habilita el reintento; un fallo
+    // del flush de arriba no debe permitir registrar un segundo listener.
     started = false;
     console.error("Failed to register global batch-event listener:", err);
   });

@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command as StdCommand, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_sql::{Migration, MigrationKind};
@@ -14,11 +14,244 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 struct BatchProcessorState {
     /// batch_id -> "pause" | "cancel"
     signals: HashMap<i64, String>,
-    /// batch_id -> child process PID (so we can kill on cancel)
+    /// batch_id -> child process PID (so we can kill on pause/cancel)
     active_child: HashMap<i64, u32>,
 }
 
 struct ProcessorState(Arc<Mutex<BatchProcessorState>>);
+
+// ---------- Child process management ----------
+//
+// Every Python child is spawned through `PyChild`:
+//  - its own process group (setsid), so killing it also kills grandchildren
+//    (yt-dlp/ffmpeg spawned by transcribe.py used to survive a cancel);
+//  - stderr drained on a dedicated thread (whisper/tqdm write hundreds of KB
+//    to stderr; with the pipe never read, the ~64KB kernel buffer fills and
+//    BOTH processes deadlock silently) — the last lines are kept for error
+//    messages;
+//  - PID registered in a global set so app exit can kill everything;
+//  - Drop kills the group and reaps, so early returns can't leak zombies or
+//    leave stale PIDs behind.
+
+/// Lock that survives a poisoned mutex (a panic elsewhere must not disable
+/// pause/cancel for the rest of the session).
+fn lock_ignore_poison<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+fn active_pgids() -> &'static Mutex<HashSet<u32>> {
+    static S: OnceLock<Mutex<HashSet<u32>>> = OnceLock::new();
+    S.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+#[cfg(unix)]
+fn kill_process_group(pid: u32) {
+    // With setsid, the child's pgid == its pid; negative pid targets the group.
+    unsafe {
+        libc::kill(-(pid as i32), libc::SIGTERM);
+    }
+}
+
+fn kill_all_children() {
+    let pids: Vec<u32> = lock_ignore_poison(active_pgids()).iter().copied().collect();
+    for pid in pids {
+        #[cfg(unix)]
+        kill_process_group(pid);
+    }
+}
+
+/// Resolve a python3 interpreter that also works in the bundled .app, where
+/// PATH is stripped to /usr/bin:/bin (a bare "python3" may not resolve).
+fn find_python3() -> &'static str {
+    static P: OnceLock<String> = OnceLock::new();
+    P.get_or_init(|| {
+        for c in [
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "/usr/bin/python3",
+        ] {
+            if Path::new(c).exists() {
+                return c.to_string();
+            }
+        }
+        "python3".to_string()
+    })
+}
+
+const STDERR_TAIL_LINES: usize = 30;
+
+struct PyChild {
+    child: Child,
+    stderr_tail: Arc<Mutex<Vec<String>>>,
+    stderr_thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl PyChild {
+    fn spawn(cmd: &mut StdCommand) -> Result<PyChild, String> {
+        cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            unsafe {
+                cmd.pre_exec(|| {
+                    libc::setsid();
+                    Ok(())
+                });
+            }
+        }
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| format!("Failed to start python script: {e}"))?;
+        lock_ignore_poison(active_pgids()).insert(child.id());
+
+        let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+        let stderr_thread = child.stderr.take().map(|stderr| {
+            let tail = stderr_tail.clone();
+            std::thread::spawn(move || {
+                let reader = std::io::BufReader::new(stderr);
+                for line in reader.lines() {
+                    let Ok(line) = line else { break };
+                    let mut v = lock_ignore_poison(&tail);
+                    v.push(line);
+                    if v.len() > STDERR_TAIL_LINES {
+                        let excess = v.len() - STDERR_TAIL_LINES;
+                        v.drain(..excess);
+                    }
+                }
+            })
+        });
+
+        Ok(PyChild {
+            child,
+            stderr_tail,
+            stderr_thread,
+        })
+    }
+
+    fn id(&self) -> u32 {
+        self.child.id()
+    }
+
+    fn take_stdout(&mut self) -> Option<std::process::ChildStdout> {
+        self.child.stdout.take()
+    }
+
+    fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        self.child.wait()
+    }
+
+    /// Last stderr lines, for attaching to error messages ("Unknown error"
+    /// without the actual Python traceback is undiagnosable from the UI).
+    fn stderr_tail_string(&self) -> String {
+        lock_ignore_poison(&self.stderr_tail).join("\n")
+    }
+
+    fn error_with_tail(&self, base: &str) -> String {
+        let tail = self.stderr_tail_string();
+        if tail.is_empty() {
+            base.to_string()
+        } else {
+            format!("{base}\nstderr:\n{tail}")
+        }
+    }
+}
+
+impl Drop for PyChild {
+    fn drop(&mut self) {
+        if matches!(self.child.try_wait(), Ok(None)) {
+            #[cfg(unix)]
+            kill_process_group(self.child.id());
+            #[cfg(not(unix))]
+            let _ = self.child.kill();
+        }
+        let _ = self.child.wait();
+        lock_ignore_poison(active_pgids()).remove(&self.child.id());
+        if let Some(h) = self.stderr_thread.take() {
+            let _ = h.join();
+        }
+    }
+}
+
+// ---------- Transcript spool ----------
+//
+// The batch transcript used to travel ONLY inside the fire-and-forget
+// `video_done` event: if the webview reloaded/crashed at that instant, hours
+// of whisper output were unrecoverable. Now the transcript is written to a
+// spool file BEFORE emitting; the frontend deletes it once persisted to
+// SQLite and re-ingests any leftovers on startup.
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+struct SpooledTranscript {
+    batch_id: i64,
+    video_id: String,
+    text: String,
+    language: String,
+    method: String,
+}
+
+fn transcript_spool_dir() -> Result<PathBuf, String> {
+    let dir = brain_metrics_dir()?.join("transcripts-spool");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    Ok(dir)
+}
+
+fn spool_file_name(video_id: &str) -> String {
+    // Video ids are [A-Za-z0-9_-]{11}, but don't trust input for a filename.
+    let safe: String = video_id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .take(64)
+        .collect();
+    format!("{safe}.json")
+}
+
+fn spool_transcript(t: &SpooledTranscript) -> Result<(), String> {
+    let dir = transcript_spool_dir()?;
+    let path = dir.join(spool_file_name(&t.video_id));
+    let json = serde_json::to_string(t).map_err(|e| format!("serialize spool: {e}"))?;
+    let tmp = dir.join(format!(".{}.tmp", spool_file_name(&t.video_id)));
+    std::fs::write(&tmp, json).map_err(|e| format!("write spool tmp: {e}"))?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("rename spool: {e}"))
+}
+
+#[tauri::command]
+async fn read_spooled_transcripts() -> Result<Vec<SpooledTranscript>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let dir = transcript_spool_dir()?;
+        let mut out = Vec::new();
+        let entries = std::fs::read_dir(&dir).map_err(|e| format!("read {}: {e}", dir.display()))?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            match std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|s| serde_json::from_str::<SpooledTranscript>(&s).ok())
+            {
+                Some(t) => out.push(t),
+                None => {
+                    // Unreadable/corrupt spool entry: drop it, it will never parse.
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
+        }
+        Ok(out)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {e}"))?
+}
+
+#[tauri::command]
+async fn discard_spooled_transcript(video_id: String) -> Result<(), String> {
+    let dir = transcript_spool_dir()?;
+    let path = dir.join(spool_file_name(&video_id));
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("remove {}: {e}", path.display())),
+    }
+}
 
 // ---------- Scraper types ----------
 
@@ -161,7 +394,7 @@ async fn resolve_channel(
     }
 
     tauri::async_runtime::spawn_blocking(move || {
-        let output = StdCommand::new("python3")
+        let output = StdCommand::new(find_python3())
             .arg(&script_path)
             .arg(&url)
             .stdout(Stdio::piped())
@@ -255,7 +488,7 @@ async fn resolve_video(
     }
 
     tauri::async_runtime::spawn_blocking(move || {
-        let output = StdCommand::new("python3")
+        let output = StdCommand::new(find_python3())
             .arg(&script_path)
             .arg(&url)
             .stdout(Stdio::piped())
@@ -349,15 +582,11 @@ async fn summarize_video(
     let app_handle = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let mut child = StdCommand::new("python3")
-            .arg(&script_path)
-            .arg(&file_path)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to start summarize script: {e}"))?;
+        let mut cmd = StdCommand::new(find_python3());
+        cmd.arg(&script_path).arg(&file_path);
+        let mut child = PyChild::spawn(&mut cmd)?;
 
-        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let stdout = child.take_stdout().ok_or("Failed to capture stdout")?;
         let reader = std::io::BufReader::new(stdout);
 
         let mut final_result: Option<SummarizeResult> = None;
@@ -382,7 +611,6 @@ async fn summarize_video(
                     final_result = Some(SummarizeResult { summary_chars, file, skipped });
                 }
                 Ok(SummarizeOutput::Error { message }) => {
-                    let _ = child.wait();
                     return Err(message);
                 }
                 Err(_) => continue,
@@ -390,7 +618,7 @@ async fn summarize_video(
         }
 
         let _ = child.wait();
-        final_result.ok_or_else(|| "No result from summarize script".into())
+        final_result.ok_or_else(|| child.error_with_tail("No result from summarize script"))
     })
     .await
     .map_err(|e| format!("Task join error: {e}"))?
@@ -437,16 +665,11 @@ async fn update_channel_brain(
     let app_handle = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let mut child = StdCommand::new("python3")
-            .arg(&script_path)
-            .arg(&channel_dir)
-            .arg(&summary_file)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to start brain script: {e}"))?;
+        let mut cmd = StdCommand::new(find_python3());
+        cmd.arg(&script_path).arg(&channel_dir).arg(&summary_file);
+        let mut child = PyChild::spawn(&mut cmd)?;
 
-        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let stdout = child.take_stdout().ok_or("Failed to capture stdout")?;
         let reader = std::io::BufReader::new(stdout);
 
         let mut final_result: Option<UpdateBrainResult> = None;
@@ -466,7 +689,6 @@ async fn update_channel_brain(
                     final_result = Some(UpdateBrainResult { brain_file, action });
                 }
                 Ok(UpdateBrainOutput::Error { message }) => {
-                    let _ = child.wait();
                     return Err(message);
                 }
                 Err(_) => continue,
@@ -474,7 +696,7 @@ async fn update_channel_brain(
         }
 
         let _ = child.wait();
-        final_result.ok_or_else(|| "No result from brain script".into())
+        final_result.ok_or_else(|| child.error_with_tail("No result from brain script"))
     })
     .await
     .map_err(|e| format!("Task join error: {e}"))?
@@ -555,18 +777,14 @@ async fn update_channel_brain_batch(
     let app_handle = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let mut cmd = StdCommand::new("python3");
+        let mut cmd = StdCommand::new(find_python3());
         cmd.arg(&script_path).arg(&channel_dir);
         for f in &summary_files {
             cmd.arg(f);
         }
-        let mut child = cmd
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to start brain batch script: {e}"))?;
+        let mut child = PyChild::spawn(&mut cmd)?;
 
-        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let stdout = child.take_stdout().ok_or("Failed to capture stdout")?;
         let reader = std::io::BufReader::new(stdout);
 
         let mut final_result: Option<UpdateBrainBatchResult> = None;
@@ -615,7 +833,6 @@ async fn update_channel_brain_batch(
                     });
                 }
                 Ok(UpdateBrainBatchOutput::Error { message }) => {
-                    let _ = child.wait();
                     return Err(message);
                 }
                 Err(_) => continue,
@@ -623,7 +840,7 @@ async fn update_channel_brain_batch(
         }
 
         let _ = child.wait();
-        final_result.ok_or_else(|| "No result from brain batch script".into())
+        final_result.ok_or_else(|| child.error_with_tail("No result from brain batch script"))
     })
     .await
     .map_err(|e| format!("Task join error: {e}"))?
@@ -714,18 +931,14 @@ async fn update_channel_brain_delta(
     let app_handle = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let mut cmd = StdCommand::new("python3");
+        let mut cmd = StdCommand::new(find_python3());
         cmd.arg(&script_path).arg(&channel_dir);
         for f in &summary_files {
             cmd.arg(f);
         }
-        let mut child = cmd
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to start brain delta script: {e}"))?;
+        let mut child = PyChild::spawn(&mut cmd)?;
 
-        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let stdout = child.take_stdout().ok_or("Failed to capture stdout")?;
         let reader = std::io::BufReader::new(stdout);
 
         let mut final_result: Option<UpdateBrainDeltaResult> = None;
@@ -780,7 +993,6 @@ async fn update_channel_brain_delta(
                     });
                 }
                 Ok(UpdateBrainDeltaOutput::Error { message }) => {
-                    let _ = child.wait();
                     return Err(message);
                 }
                 Err(_) => continue,
@@ -788,7 +1000,7 @@ async fn update_channel_brain_delta(
         }
 
         let _ = child.wait();
-        final_result.ok_or_else(|| "No result from brain delta script".into())
+        final_result.ok_or_else(|| child.error_with_tail("No result from brain delta script"))
     })
     .await
     .map_err(|e| format!("Task join error: {e}"))?
@@ -818,15 +1030,11 @@ async fn scrape_channel(
     let app_handle = app.clone();
 
     tauri::async_runtime::spawn_blocking(move || {
-        let mut child = StdCommand::new("python3")
-            .arg(&script_path)
-            .arg(&channel_url)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Failed to start scraper: {e}"))?;
+        let mut cmd = StdCommand::new(find_python3());
+        cmd.arg(&script_path).arg(&channel_url);
+        let mut child = PyChild::spawn(&mut cmd)?;
 
-        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let stdout = child.take_stdout().ok_or("Failed to capture stdout")?;
         let reader = std::io::BufReader::new(stdout);
 
         let mut final_videos: Vec<ScrapedVideoOut> = Vec::new();
@@ -861,14 +1069,12 @@ async fn scrape_channel(
                         .collect();
                 }
                 Ok(ScraperOutput::Error { message }) => {
-                    let _ = child.wait();
                     return Err(message);
                 }
                 Err(_) => continue,
             }
         }
 
-        // Fix #3: wait for child to avoid zombie
         let _ = child.wait();
 
         let total = final_videos.len();
@@ -888,25 +1094,22 @@ fn run_transcribe(
     video_url: &str,
     model: &str,
     language: Option<&str>,
-) -> Result<Child, String> {
-    let mut cmd = StdCommand::new("python3");
+) -> Result<PyChild, String> {
+    let mut cmd = StdCommand::new(find_python3());
     cmd.arg(script_path)
         .arg(video_url)
         .arg("--model")
-        .arg(model)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .arg(model);
 
     if let Some(lang) = language {
         cmd.arg("--language").arg(lang);
     }
 
-    cmd.spawn()
-        .map_err(|e| format!("Failed to start transcribe.py: {e}"))
+    PyChild::spawn(&mut cmd)
 }
 
 fn check_signal(state: &Arc<Mutex<BatchProcessorState>>, batch_id: i64) -> Option<String> {
-    let lock = state.lock().unwrap();
+    let lock = lock_ignore_poison(state);
     lock.signals.get(&batch_id).cloned()
 }
 
@@ -939,7 +1142,7 @@ async fn process_batch(
 
     // Clear any stale signals
     {
-        let mut lock = shared_state.lock().unwrap();
+        let mut lock = lock_ignore_poison(&shared_state);
         lock.signals.remove(&batch_id);
     }
 
@@ -975,7 +1178,7 @@ async fn process_batch(
                 );
 
                 {
-                    let mut lock = shared_state.lock().unwrap();
+                    let mut lock = lock_ignore_poison(&shared_state);
                     lock.signals.remove(&batch_id);
                 }
 
@@ -1025,13 +1228,36 @@ async fn process_batch(
                 }
             };
 
-            // Store pid for potential kill
+            // Store pid so pause/cancel can kill the process group immediately
             {
-                let mut lock = shared_state.lock().unwrap();
+                let mut lock = lock_ignore_poison(&shared_state);
                 lock.active_child.insert(batch_id, child.id());
             }
 
-            let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+            let stdout = match child.take_stdout() {
+                Some(s) => s,
+                None => {
+                    // PyChild::drop reaps; just clear the registered pid and count the failure.
+                    let mut lock = lock_ignore_poison(&shared_state);
+                    lock.active_child.remove(&batch_id);
+                    drop(lock);
+                    failed += 1;
+                    let _ = app_handle.emit(
+                        "batch-event",
+                        BatchEvent {
+                            batch_id,
+                            video_id: video.id.clone(),
+                            event_type: "video_error".into(),
+                            message: "Failed to capture stdout".into(),
+                            percent: None,
+                            text: None,
+                            language: None,
+                            method: None,
+                        },
+                    );
+                    continue;
+                }
+            };
             let reader = std::io::BufReader::new(stdout);
 
             let mut video_succeeded = false;
@@ -1072,6 +1298,18 @@ async fn process_batch(
                         method,
                     }) => {
                         video_succeeded = true;
+                        // Spool to disk BEFORE emitting: the event is fire-and-forget
+                        // and the transcript only lived in its payload — a webview
+                        // reload at this instant used to lose hours of whisper work.
+                        if let Err(e) = spool_transcript(&SpooledTranscript {
+                            batch_id,
+                            video_id: video.id.clone(),
+                            text: text.clone(),
+                            language: language.clone(),
+                            method: method.clone(),
+                        }) {
+                            eprintln!("[spool] failed for {}: {e}", video.id);
+                        }
                         let _ = app_handle.emit(
                             "batch-event",
                             BatchEvent {
@@ -1098,16 +1336,37 @@ async fn process_batch(
 
             // Clean up active_child
             {
-                let mut lock = shared_state.lock().unwrap();
+                let mut lock = lock_ignore_poison(&shared_state);
                 lock.active_child.remove(&batch_id);
             }
 
             if video_succeeded {
                 completed += 1;
+            } else if matches!(
+                check_signal(&shared_state, batch_id).as_deref(),
+                Some("pause") | Some("cancel")
+            ) {
+                // The process was killed by pause/cancel, not a real failure:
+                // requeue the video (frontend puts it back to 'en_cola') so
+                // Resume picks it up. The next loop iteration (or the
+                // post-loop check) emits batch_pausado/cancelado and returns.
+                let _ = app_handle.emit(
+                    "batch-event",
+                    BatchEvent {
+                        batch_id,
+                        video_id: video.id.clone(),
+                        event_type: "video_requeued".into(),
+                        message: "Video interrumpido por pausa/cancelación — re-encolado".into(),
+                        percent: None,
+                        text: None,
+                        language: None,
+                        method: None,
+                    },
+                );
             } else {
                 failed += 1;
                 if error_msg.is_empty() {
-                    error_msg = "Unknown transcription error".into();
+                    error_msg = child.error_with_tail("Unknown transcription error");
                 }
                 let _ = app_handle.emit(
                     "batch-event",
@@ -1123,6 +1382,34 @@ async fn process_batch(
                     },
                 );
             }
+        }
+
+        // A pause/cancel during the LAST video would otherwise fall through to
+        // batch_done; check once more so the batch ends with the right status.
+        if let Some(signal) = check_signal(&shared_state, batch_id) {
+            let status = if signal == "cancel" { "cancelado" } else { "pausado" };
+            let _ = app_handle.emit(
+                "batch-event",
+                BatchEvent {
+                    batch_id,
+                    video_id: String::new(),
+                    event_type: format!("batch_{status}"),
+                    message: format!("Batch {status}"),
+                    percent: None,
+                    text: None,
+                    language: None,
+                    method: None,
+                },
+            );
+            {
+                let mut lock = lock_ignore_poison(&shared_state);
+                lock.signals.remove(&batch_id);
+            }
+            return Ok(BatchProcessResult {
+                completed,
+                failed,
+                status: status.to_string(),
+            });
         }
 
         let _ = app_handle.emit(
@@ -1149,25 +1436,24 @@ async fn process_batch(
     .map_err(|e| format!("Task join error: {e}"))?
 }
 
-// Fix #7: signal_batch kills active process on cancel
+// signal_batch: pause AND cancel kill the in-flight video's process GROUP.
+// Group (not bare pid): transcribe.py spawns yt-dlp/ffmpeg grandchildren that
+// used to survive and keep downloading. Pause kills too — the audio cache in
+// transcribe.py makes the requeued video cheap to resume, and "pause" that
+// keeps transcribing for another hour was the top pending complaint.
 #[tauri::command]
 async fn signal_batch(
     state: tauri::State<'_, ProcessorState>,
     batch_id: i64,
     signal: String,
 ) -> Result<(), String> {
-    let mut lock = state.0.lock().unwrap();
+    let mut lock = lock_ignore_poison(&state.0);
     lock.signals.insert(batch_id, signal.clone());
 
-    // If cancelling, kill the active child process immediately
-    if signal == "cancel" {
+    if signal == "cancel" || signal == "pause" {
         if let Some(pid) = lock.active_child.get(&batch_id) {
             #[cfg(unix)]
-            {
-                unsafe {
-                    libc::kill(*pid as i32, libc::SIGTERM);
-                }
-            }
+            kill_process_group(*pid);
             #[cfg(not(unix))]
             {
                 // On Windows, we can't easily kill by PID from here.
@@ -1204,7 +1490,7 @@ async fn transcribe_single(
     tauri::async_runtime::spawn_blocking(move || {
         let mut child = run_transcribe(&script_path, &video_url, &model, language.as_deref())?;
 
-        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let stdout = child.take_stdout().ok_or("Failed to capture stdout")?;
         let reader = std::io::BufReader::new(stdout);
 
         for line in reader.lines() {
@@ -1241,7 +1527,6 @@ async fn transcribe_single(
                     language,
                     method,
                 }) => {
-                    let _ = child.wait();
                     return Ok(BatchEvent {
                         batch_id: 0,
                         video_id,
@@ -1254,7 +1539,6 @@ async fn transcribe_single(
                     });
                 }
                 Ok(TranscribeOutput::Error { message }) => {
-                    let _ = child.wait();
                     return Err(message);
                 }
                 Err(_) => continue,
@@ -1262,7 +1546,7 @@ async fn transcribe_single(
         }
 
         let _ = child.wait();
-        Err("Transcription ended without result".into())
+        Err(child.error_with_tail("Transcription ended without result"))
     })
     .await
     .map_err(|e| format!("Task join error: {e}"))?
@@ -1344,7 +1628,20 @@ async fn export_channel(request: ExportRequest) -> Result<ExportResult, String> 
     for video in &request.videos {
         let date_prefix = video.published_at.as_deref().unwrap_or("unknown-date");
         let title_slug = slugify(&video.title);
-        let filename = format!("{date_prefix}_{title_slug}.md");
+        // video_id en el nombre: dos videos con la misma fecha y slug (títulos
+        // que solo difieren en acentos/símbolos, o más allá del carácter 80)
+        // colisionaban y el segundo NUNCA se exportaba (contado como skipped).
+        // Los ids de YouTube son case-sensitive: sanitizar sin lowercasing.
+        let safe_id: String = video
+            .id
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .take(24)
+            .collect();
+        let filename = format!("{date_prefix}_{title_slug}_{safe_id}.md");
+        // Nombre previo al fix, para reconocer los archivos ya exportados y no
+        // re-exportarlos (ni repagar su resumen) con el nombre nuevo.
+        let legacy_filename = format!("{date_prefix}_{title_slug}.md");
 
         // Organize into transcripciones/YYYY/ subfolders
         let year_folder = if date_prefix.len() >= 4 && date_prefix != "unknown-date" {
@@ -1357,8 +1654,8 @@ async fn export_channel(request: ExportRequest) -> Result<ExportResult, String> 
             .map_err(|e| format!("Failed to create year directory: {e}"))?;
         let filepath = year_dir.join(&filename);
 
-        // Skip if file already exists
-        if filepath.exists() {
+        // Skip if file already exists (either naming scheme)
+        if filepath.exists() || year_dir.join(&legacy_filename).exists() {
             skipped += 1;
             continue;
         }
@@ -1473,6 +1770,54 @@ async fn record_brain_metric(line: String) -> Result<(), String> {
     })
     .await
     .map_err(|e| format!("Task join error: {e}"))?
+}
+
+#[cfg(test)]
+mod pychild_tests {
+    use super::*;
+    use std::io::BufRead;
+
+    // Sin el drenado de stderr en hilo esto se colgaba para siempre: 1MB a
+    // stderr llena el buffer del pipe (~64KB), el hijo se bloquea escribiendo
+    // y el lado Rust se bloquea leyendo stdout (el deadlock que congelaba
+    // lotes enteros con whisper/tqdm).
+    #[test]
+    fn stderr_flood_does_not_deadlock() {
+        let mut cmd = StdCommand::new(find_python3());
+        cmd.arg("-c").arg(
+            "import sys\nsys.stderr.write('x'*1000000)\nsys.stderr.flush()\nprint('done')",
+        );
+        let mut child = PyChild::spawn(&mut cmd).unwrap();
+        let stdout = child.take_stdout().unwrap();
+        let lines: Vec<String> = std::io::BufReader::new(stdout)
+            .lines()
+            .map_while(Result::ok)
+            .collect();
+        let _ = child.wait();
+        assert!(lines.iter().any(|l| l == "done"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn drop_kills_process_group_including_grandchild() {
+        // El python padre lanza un `sleep 300` (nieto, como yt-dlp/ffmpeg) e
+        // imprime su pid; drop debe matar al GRUPO entero, no solo al padre.
+        let mut cmd = StdCommand::new(find_python3());
+        cmd.arg("-c").arg(
+            "import subprocess, time\np = subprocess.Popen(['sleep','300'])\nprint(p.pid, flush=True)\ntime.sleep(300)",
+        );
+        let mut child = PyChild::spawn(&mut cmd).unwrap();
+        let stdout = child.take_stdout().unwrap();
+        let mut line = String::new();
+        std::io::BufReader::new(stdout).read_line(&mut line).unwrap();
+        let grandchild_pid: i32 = line.trim().parse().unwrap();
+
+        drop(child);
+
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        let alive = unsafe { libc::kill(grandchild_pid, 0) } == 0;
+        assert!(!alive, "grandchild `sleep` survived the group kill");
+    }
 }
 
 #[cfg(test)]
@@ -1627,7 +1972,17 @@ pub fn run() {
             signal_batch,
             transcribe_single,
             export_channel,
+            read_spooled_transcripts,
+            discard_spooled_transcript,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| match event {
+            // Kill every registered python/yt-dlp/whisper process group on app
+            // exit — they used to survive as orphans burning CPU for hours.
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                kill_all_children();
+            }
+            _ => {}
+        });
 }

@@ -749,14 +749,19 @@ def read_summary_from_md(md_path: str):
                     title = line.split(":", 1)[1].strip().strip('"')
                 elif line.startswith("date:"):
                     date = line.split(":", 1)[1].strip().strip('"')
+    # Frontmatter fuera POR POSICIÓN (no split por "\n---\n": una regla
+    # horizontal DENTRO del resumen cortaba la extracción a la mitad).
     summary_text = content
-    if "---\n" in content:
-        parts = content.split("\n---\n", 2)
-        if len(parts) >= 2:
-            summary_text = parts[1]
+    if content.startswith("---\n"):
+        fm_end = content.find("\n---\n", 4)
+        if fm_end != -1:
+            summary_text = content[fm_end + 5:]
     if "## Transcripción completa" in summary_text:
         summary_text = summary_text.split("## Transcripción completa")[0]
-    return summary_text.strip(), f"{date}: {title}"
+    summary_text = summary_text.strip()
+    if summary_text.endswith("---"):  # separador previo a la transcripción
+        summary_text = summary_text[:-3].rstrip()
+    return summary_text, f"{date}: {title}"
 
 
 def _norm_label(s: str) -> str:
@@ -906,12 +911,14 @@ def run(channel_dir: str, summary_files: list) -> None:
 
     t_cl = time.perf_counter()
     try:
+        # Prompt por STDIN, no por argv: cerebro grande + N resúmenes excedían
+        # ARG_MAX (~1MB en macOS) y el exec moría con OSError sin mensaje.
         proc = subprocess.run(
             [claude_bin, "-p",
              "--disable-slash-commands",
              "--disallowedTools", CLAUDE_DISALLOWED_TOOLS,
-             "--append-system-prompt", GUARD_SYS,
-             full_prompt],
+             "--append-system-prompt", GUARD_SYS],
+            input=full_prompt,
             capture_output=True,
             text=True,
             timeout=timeout_s,

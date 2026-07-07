@@ -72,13 +72,30 @@ FFMPEG_SEARCH_DIRS = [
 ]
 
 
+_YTDLP_CACHE = [None]
+
+
 def find_ytdlp() -> str:
+    """First candidate that actually RUNS. A candidate can exist with exec bit
+    set and still be broken (seen live: corrupted pipx shim → OSError
+    'Malformed Mach-o' on every call); validate with --version once per process."""
+    if _YTDLP_CACHE[0]:
+        return _YTDLP_CACHE[0]
+    candidates = []
     found = shutil.which("yt-dlp")
     if found:
-        return found
-    for p in YTDLP_SEARCH_PATHS:
-        if os.path.isfile(p) and os.access(p, os.X_OK):
-            return p
+        candidates.append(found)
+    candidates.extend(p for p in YTDLP_SEARCH_PATHS if p not in candidates)
+    for p in candidates:
+        if not (os.path.isfile(p) and os.access(p, os.X_OK)):
+            continue
+        try:
+            proc = subprocess.run([p, "--version"], capture_output=True, timeout=20)
+            if proc.returncode == 0:
+                _YTDLP_CACHE[0] = p
+                return p
+        except (OSError, subprocess.TimeoutExpired):
+            continue
     return "yt-dlp"
 
 
@@ -168,20 +185,26 @@ def transcribe_with_whisper(audio_path: str, model_name: str, language=None) -> 
     }
 
 
-def _try_subtitle_lang(video_url: str, lang: str):
-    """Fetch captions for a single language. Returns dict on success, None otherwise.
+def _try_subtitle_lang(video_url: str, lang: str, auto: bool):
+    """Fetch captions for a single language/track. Returns dict on success, None otherwise.
 
-    Isolated per-language subprocess + tempdir so a failure on one language
-    (e.g. HTTP 429 on YouTube's auto-translate path when asking `es` for an
-    English-only video) cannot abort the attempt for the other language.
+    auto=False → only MANUAL tracks (--write-sub): human-made, never machine-translated.
+    auto=True  → only the ORIGINAL auto-caption track (--write-auto-sub with
+                 `<lang>-orig`, e.g. `es-orig` = "Spanish (Original)"): the real
+                 spoken-language track. Plain `<lang>` auto-subs are NEVER requested —
+                 YouTube serves machine TRANSLATIONS to ~100 languages on that path,
+                 so `en` on a Spanish video silently returns es→en machine output.
+
+    Isolated per-language subprocess + tempdir so a failure on one track
+    (e.g. HTTP 429) cannot abort the attempt for the next.
     """
+    sub_lang = f"{lang}-orig" if auto else f"{lang},{lang}-*"
     with tempfile.TemporaryDirectory() as tmpdir:
         out_template = os.path.join(tmpdir, "subs")
         cmd = [
             find_ytdlp(),
-            "--write-auto-sub",
-            "--write-sub",
-            "--sub-lang", lang,
+            "--write-auto-sub" if auto else "--write-sub",
+            "--sub-langs", sub_lang,
             "--sub-format", "vtt",
             "--skip-download",
             "-o", out_template,
@@ -193,42 +216,51 @@ def _try_subtitle_lang(video_url: str, lang: str):
         try:
             subprocess.run(cmd, capture_output=True, text=True, timeout=180)
         except subprocess.TimeoutExpired:
-            return None  # network stall — fall through to next lang / whisper
+            return None  # network stall — fall through to next track / whisper
         # Ignore return code — only the on-disk file matters.
         for fname in os.listdir(tmpdir):
-            if fname.endswith(".vtt") and f".{lang}." in fname:
+            # Matches .es., .es-orig., .es-419., .en-US., etc.
+            if fname.endswith(".vtt") and (f".{lang}." in fname or f".{lang}-" in fname):
                 text = parse_vtt(os.path.join(tmpdir, fname))
                 if text and len(text) > 50:
                     return {
                         "text": text,
                         "language": lang,
-                        "method": "youtube-subtitles",
+                        "method": "youtube-subtitles" if not auto else "youtube-autosubs",
                     }
     return None
 
 
-def transcribe_with_subtitles(video_url: str):
-    """Try YouTube subtitles, language by language.
+def transcribe_with_subtitles(video_url: str, lang_hint=None):
+    """Try YouTube subtitles without ever accepting a machine TRANSLATION.
 
-    Each language gets its own yt-dlp call so a 429 on one (typically the
-    en↔es auto-translate request, which YouTube rate-limits more aggressively
-    than manual tracks) cannot abort the next. Only after both languages fail
-    does the caller fall back to Whisper.
-
-    Order: en first, then es. Asking `es` first on an English-only channel
-    forces an en→es auto-translate and frequently 429s; en-first short-circuits
-    that. On Spanish channels with a manual `es` track, en yields nothing and
-    es resolves on the second call (one extra ~1-2s yt-dlp call).
+    Pass 1: manual tracks (es/en, hint first) — human-made, safe.
+    Pass 2: original auto-caption track (`<lang>-orig`) — the actual spoken
+            language, never translated.
+    If neither exists, return None and let the caller fall back to Whisper
+    (slower but correct by construction). We deliberately do NOT request the
+    plain auto-sub `<lang>` track: on a video spoken in the other language it
+    returns a machine translation that poisons summaries and CEREBRO.md
+    (seen live: `es` transcripts on English-only channels).
     """
     emit({"type": "progress", "stage": "subtitles",
           "message": "Checking for existing subtitles..."})
 
-    for lang in ("en", "es"):
-        result = _try_subtitle_lang(video_url, lang)
-        if result:
-            return result
+    langs = ["es", "en"]
+    hint = (lang_hint or "").split("-")[0].lower()
+    if hint in langs:
+        langs.remove(hint)
+        langs.insert(0, hint)
+
+    for auto in (False, True):
+        for lang in langs:
+            result = _try_subtitle_lang(video_url, lang, auto=auto)
+            if result:
+                return result
         emit({"type": "progress", "stage": "subtitles",
-              "message": f"No {lang} subtitles, trying next..."})
+              "message": ("No manual subtitles, trying original auto-captions..."
+                          if not auto else
+                          "No original captions either, falling back to whisper...")})
 
     return None
 
@@ -289,7 +321,7 @@ def main():
     try:
         # Step 1: Try YouTube subtitles first (fast, no GPU needed)
         if not args.skip_subtitles:
-            result = transcribe_with_subtitles(args.video_url)
+            result = transcribe_with_subtitles(args.video_url, args.language)
             if result:
                 emit({"type": "result", **result})
                 return
@@ -312,7 +344,6 @@ def main():
         vid = m.group(1) if m else hashlib.sha1(args.video_url.encode()).hexdigest()[:16]
         cache_dir = os.path.expanduser("~/Library/Caches/youtube-transcriber/audio")
         os.makedirs(cache_dir, exist_ok=True)
-        audio_template = os.path.join(cache_dir, f"{vid}.mp3")
 
         cached = None
         for ext in (".mp3", ".m4a", ".opus", ".webm"):
@@ -324,7 +355,18 @@ def main():
             emit({"type": "progress", "stage": "download", "message": "Audio cacheado de un intento previo — sin re-descargar."})
             audio_path = cached
         else:
-            audio_path = download_audio(args.video_url, audio_template)
+            # Descargar a un subdir temporal y mover al caché SOLO al terminar:
+            # una cancelación a mitad dejaba un mp3 TRUNCADO en el caché y el
+            # siguiente intento transcribía solo el pedazo existente, sin error.
+            tmp_dir = os.path.join(cache_dir, f".tmp-{vid}")
+            shutil.rmtree(tmp_dir, ignore_errors=True)  # restos de intentos previos
+            os.makedirs(tmp_dir, exist_ok=True)
+            try:
+                tmp_audio = download_audio(args.video_url, os.path.join(tmp_dir, f"{vid}.mp3"))
+                audio_path = os.path.join(cache_dir, os.path.basename(tmp_audio))
+                os.replace(tmp_audio, audio_path)
+            finally:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
             emit({"type": "progress", "stage": "download", "message": "Audio downloaded."})
 
         result = transcribe_with_whisper(audio_path, args.model, args.language)

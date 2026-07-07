@@ -218,17 +218,16 @@ function BatchVideoRow({
   video,
   currentVideoId,
   progressMsg,
-  retrying,
+  isRetrying,
   onRetry,
 }: {
   video: Video;
   currentVideoId: string | null;
   progressMsg: string;
-  retrying: string | null;
+  isRetrying: boolean;
   onRetry: (video: Video) => void;
 }) {
   const isCurrent = currentVideoId === video.id;
-  const isRetrying = retrying === video.id;
   const cfg = VIDEO_STATUS[video.status] ?? { label: video.status, icon: Clock, color: "text-muted-foreground" };
   const Icon = isCurrent ? Loader2 : cfg.icon;
 
@@ -333,7 +332,9 @@ function BatchViewPage() {
   const [processing, setProcessing] = useState(false);
   const [currentVideoId, setCurrentVideoId] = useState<string | null>(null);
   const [progressMsg, setProgressMsg] = useState("");
-  const [retrying, setRetrying] = useState<string | null>(null);
+  // Set (no un solo id): dos retries simultáneos con un string único se
+  // pisaban el indicador y permitían dobles clics sobre el mismo video.
+  const [retrying, setRetrying] = useState<Set<string>>(new Set());
 
   // Ref to track if we should listen for events
   const unlistenRef = useRef<(() => void) | null>(null);
@@ -443,6 +444,17 @@ function BatchViewPage() {
             );
             break;
 
+          case "video_requeued":
+            // Video interrumpido por pause/cancel: vuelve a la cola, no es error.
+            setCurrentVideoId(null);
+            setProgressMsg("");
+            setVideos(prev =>
+              prev.map(v =>
+                v.id === e.video_id ? { ...v, status: "en_cola", error_message: null } : v
+              )
+            );
+            break;
+
           case "batch_done":
           case "batch_pausado":
           case "batch_cancelado":
@@ -484,6 +496,8 @@ function BatchViewPage() {
 
     setProcessing(true);
     await updateBatchStatus(batchId, "procesando");
+    // Optimista: el badge mostraba "Ready" hasta que terminaba el primer video.
+    setBatch(prev => prev ? { ...prev, status: "procesando" } : prev);
 
     // Fix #2: Fetch fresh videos from DB, not stale React state
     const freshVideos = await getVideosForBatch(channelId, batch.batch_number);
@@ -533,6 +547,7 @@ function BatchViewPage() {
 
     setProcessing(true);
     await updateBatchStatus(batchId, "procesando");
+    setBatch(prev => prev ? { ...prev, status: "procesando" } : prev);
 
     // Fix #2: Fetch fresh videos from DB
     const freshVideos = await getVideosForBatch(channelId, batch.batch_number);
@@ -591,7 +606,8 @@ function BatchViewPage() {
   }, [channelId, router]);
 
   const handleRetry = useCallback(async (video: Video) => {
-    setRetrying(video.id);
+    if (retrying.has(video.id)) return;
+    setRetrying(prev => new Set(prev).add(video.id));
     await updateVideoStatus(video.id, "transcribiendo");
     setVideos(prev => prev.map(v => v.id === video.id ? { ...v, status: "transcribiendo" } : v));
 
@@ -626,9 +642,13 @@ function BatchViewPage() {
       await updateVideoStatus(video.id, "error", msg);
       await loadData();
     } finally {
-      setRetrying(null);
+      setRetrying(prev => {
+        const next = new Set(prev);
+        next.delete(video.id);
+        return next;
+      });
     }
-  }, [batchId, loadData]);
+  }, [batchId, loadData, retrying]);
 
   // ---------- Render ----------
 
@@ -659,8 +679,11 @@ function BatchViewPage() {
   }
 
   const batchBadge = BATCH_STATUS_BADGE[batch.status] ?? { label: batch.status, variant: "outline" as const };
-  const canStart = batch.status === "preparado";
-  const canResume = batch.status === "pausado";
+  // !processing: el status local del batch tarda en refrescarse tras el clic;
+  // sin esto Start/Resume y Pause aparecían a la vez y un segundo clic en
+  // Start disparaba el alert de "otro lote activo".
+  const canStart = batch.status === "preparado" && !processing;
+  const canResume = batch.status === "pausado" && !processing;
   const canPause = processing;
   const canCancel = processing || batch.status === "pausado";
 
@@ -760,7 +783,7 @@ function BatchViewPage() {
               video={video}
               currentVideoId={currentVideoId}
               progressMsg={currentVideoId === video.id ? progressMsg : ""}
-              retrying={retrying}
+              isRetrying={retrying.has(video.id)}
               onRetry={handleRetry}
             />
           ))
